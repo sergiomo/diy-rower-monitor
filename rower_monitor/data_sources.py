@@ -1,6 +1,7 @@
 import csv
 import pigpio
 
+
 class DataSource:
     def __init__(self):
         pass
@@ -10,6 +11,7 @@ class DataSource:
 
     def stop(self):
         pass
+
 
 class PiGpioClient(DataSource):
     #The maximum number of ticks that the Raspberry Pi can count up to before rolling over.
@@ -46,16 +48,15 @@ class PiGpioClient(DataSource):
             self.stop()
         self._pigpio_connection = pigpio.pi(self.ip_address, self.pigpio_port)
         self._pigpio_connection.set_mode(self.gpio_pin_number, pigpio.INPUT)
-        self._pigpio_connection.set_glitch_filter(self.gpio_pin_number, self.glitch_filter_us)
+        self._pigpio_connection.set_glitch_filter(self.gpio_pin_number,
+                                                  self.glitch_filter_us)
 
     def _pigpio_callback(self, pin_num, level, raw_ticks):
         if pin_num != self.gpio_pin_number:
             return
-        
+
         self.rising_edge_event_handler_callback(
-            self.get_timestamp_from_raw_ticks(raw_ticks),
-            raw_ticks
-        )
+            self.get_timestamp_from_raw_ticks(raw_ticks), raw_ticks)
 
     def get_timestamp_from_raw_ticks(self, raw_ticks):
         if self._first_raw_tick_value is None:
@@ -66,16 +67,14 @@ class PiGpioClient(DataSource):
         if self._last_raw_tick_value is not None and raw_ticks < self._last_raw_tick_value:
             self._num_rpi_counter_rollovers += 1
         self._last_raw_tick_value = raw_ticks
-        
+
         #Adjust the raw tick value so the first event happens at t=0 us; and also account for any
         #observed Raspberry Pi counter rollovers.
         adjusted_ticks = ticks - self._first_observed_raw_tick_value + (
-            self.RPI_TIMER_MAX_VALUE * self._num_rpi_counter_rollovers
-        )
+            self.RPI_TIMER_MAX_VALUE * self._num_rpi_counter_rollovers)
 
         #Convert the adjusted tick count to seconds since the first tick
         return adjusted_ticks * self.RPI_TICK_PERIOD_IN_SECONDS
-        
 
     def start(self):
         self.connect()
@@ -84,8 +83,7 @@ class PiGpioClient(DataSource):
         self._pigpio_event_subscriber = self._pigpio_connection.callback(
             user_gpio=self.gpio_pin_number,
             edge=pigpio.RISING_EDGE,
-            func=self._pigpio_callback
-        )
+            func=self._pigpio_callback)
 
     def stop(self):
         if self._pigpio_event_subscriber is not None:
@@ -102,7 +100,7 @@ class PiGpioClient(DataSource):
 #Provides data from a pre-recorded workout. Useful for development and debugging.
 class CsvFile(DataSource):
     DUMMY_VALUE = 0
-    
+
     def __init__(self,
                  rising_edge_event_handler_callback,
                  ticks_csv_file_path,
@@ -118,12 +116,7 @@ class CsvFile(DataSource):
                 tick = int(row[self.ticks_column_name])
                 if tick == self.DUMMY_VALUE:
                     continue
-                self.rising_edge_event_handler_callback(
-                    tick
-                    raw_ticks,
-                )
+                self.rising_edge_event_handler_callback(tick, raw_ticks)
 
     def stop(self):
-        pass
-
-
+        return
