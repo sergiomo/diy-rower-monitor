@@ -28,13 +28,11 @@ class PiGpioClient(DataSource):
 
     def __init__(
         self,
-        rising_edge_event_handler_callback,
         ip_address=self.RPI_IP_ADDRESS,
         pigpio_port=self.RPI_PIGPIO_PORT,
         gpio_pin_number=self.RPI_PIN_NUMBER,
         glitch_filter_us=self.GLITCH_FILTER_US,
     ):
-        self.rising_edge_event_handler_callback = rising_edge_event_handler_callback
         self.ip_address = ip_address
         self.pigpio_port = pigpio_port
         self.gpio_pin_number = gpio_pin_number
@@ -58,7 +56,7 @@ class PiGpioClient(DataSource):
         if pin_num != self.gpio_pin_number:
             return
 
-        self.rising_edge_event_handler_callback(
+        self.sensor_pulse_event_handler_callback(
             self.get_timestamp_from_raw_ticks(raw_ticks), raw_ticks
         )
 
@@ -86,13 +84,15 @@ class PiGpioClient(DataSource):
         # Convert the adjusted tick count to seconds since the first tick
         return adjusted_ticks * self.RPI_TICK_PERIOD_IN_SECONDS
 
-    def start(self):
+    def start(self, sensor_pulse_event_handler_callback):
+        self.sensor_pulse_event_handler_callback = sensor_pulse_event_handler_callback
         self.connect()
-        # This will configure the pigpio callback thread so it calls our function whenever there's a
-        # rising edge on our pin.
+        # The infrared sensor output goes low when a flywheel hole passses in front of it. This will
+        # configure the pigpio callback thread so it calls our function whenever there's a falling
+        # edge on our pin.
         self._pigpio_event_subscriber = self._pigpio_connection.callback(
             user_gpio=self.gpio_pin_number,
-            edge=pigpio.RISING_EDGE,
+            edge=pigpio.FALLING_EDGE,
             func=self._pigpio_callback,
         )
 
@@ -114,22 +114,22 @@ class CsvFile(DataSource):
 
     def __init__(
         self,
-        rising_edge_event_handler_callback,
+        sensor_pulse_event_handler_callback,
         ticks_csv_file_path,
         ticks_column_name="ticks",
     ):
-        self.rising_edge_event_handler_callback = rising_edge_event_handler_callback
+        self.sensor_pulse_event_handler_callback = sensor_pulse_event_handler_callback
         self.ticks_csv_file_path = ticks_csv_file_path
         self.ticks_column_name = ticks_column_name
 
-    def start(self):
+    def start(self, sensor_pulse_event_handler_callback):
         with open(self.ticks_csv_file_path) as input_file:
             csv_reader = csv.DictReader(input_file)
             for row in csv_reader:
                 tick = int(row[self.ticks_column_name])
                 if tick == self.DUMMY_VALUE:
                     continue
-                self.rising_edge_event_handler_callback(tick, raw_ticks)
+                sensor_pulse_event_handler_callback(tick, raw_ticks)
 
     def stop(self):
         return
