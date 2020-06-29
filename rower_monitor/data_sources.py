@@ -6,7 +6,7 @@ class DataSource:
     def __init__(self):
         pass
 
-    def start(self):
+    def start(self, sensor_pulse_event_handler_callback):
         pass
 
     def stop(self):
@@ -28,10 +28,10 @@ class PiGpioClient(DataSource):
 
     def __init__(
         self,
-        ip_address=self.RPI_IP_ADDRESS,
-        pigpio_port=self.RPI_PIGPIO_PORT,
-        gpio_pin_number=self.RPI_PIN_NUMBER,
-        glitch_filter_us=self.GLITCH_FILTER_US,
+        ip_address=RPI_IP_ADDRESS,
+        pigpio_port=RPI_PIGPIO_PORT,
+        gpio_pin_number=RPI_PIN_NUMBER,
+        glitch_filter_us=GLITCH_FILTER_US,
     ):
         self.ip_address = ip_address
         self.pigpio_port = pigpio_port
@@ -76,8 +76,8 @@ class PiGpioClient(DataSource):
         # Adjust the raw tick value so the first event happens at t=0 us; and also account for any
         # observed Raspberry Pi counter rollovers.
         adjusted_ticks = (
-            ticks
-            - self._first_observed_raw_tick_value
+            raw_ticks
+            - self._first_raw_tick_value
             + (self.RPI_TIMER_MAX_VALUE * self._num_rpi_counter_rollovers)
         )
 
@@ -87,7 +87,7 @@ class PiGpioClient(DataSource):
     def start(self, sensor_pulse_event_handler_callback):
         self.sensor_pulse_event_handler_callback = sensor_pulse_event_handler_callback
         self.connect()
-        # The infrared sensor output goes low when a flywheel hole passses in front of it. This will
+        # The infrared sensor output goes low when a flywheel hole passes in front of it. This will
         # configure the pigpio callback thread so it calls our function whenever there's a falling
         # edge on our pin.
         self._pigpio_event_subscriber = self._pigpio_connection.callback(
@@ -109,27 +109,33 @@ class PiGpioClient(DataSource):
 
 
 # Provides data from a pre-recorded workout. Useful for development and debugging.
-class CsvFile(DataSource):
+class CsvFile(PiGpioClient):
     DUMMY_VALUE = 0
 
     def __init__(
         self,
         sensor_pulse_event_handler_callback,
         ticks_csv_file_path,
-        ticks_column_name="ticks",
+        raw_ticks_column_name="ticks",
     ):
         self.sensor_pulse_event_handler_callback = sensor_pulse_event_handler_callback
         self.ticks_csv_file_path = ticks_csv_file_path
-        self.ticks_column_name = ticks_column_name
+        self.raw_ticks_column_name = raw_ticks_column_name
+        self._first_raw_tick_value = None
+        self._last_raw_tick_value = None
+        self._num_rpi_counter_rollovers = 0
 
     def start(self, sensor_pulse_event_handler_callback):
         with open(self.ticks_csv_file_path) as input_file:
             csv_reader = csv.DictReader(input_file)
             for row in csv_reader:
-                tick = int(row[self.ticks_column_name])
-                if tick == self.DUMMY_VALUE:
+                raw_ticks = int(row[self.raw_ticks_column_name])
+                if raw_ticks == self.DUMMY_VALUE:
                     continue
-                sensor_pulse_event_handler_callback(tick, raw_ticks)
+                sensor_pulse_event_handler_callback(
+                    self.get_timestamp_from_raw_ticks(raw_ticks),
+                    raw_ticks
+                )
 
     def stop(self):
         return
