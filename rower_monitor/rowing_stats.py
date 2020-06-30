@@ -194,8 +194,8 @@ class LinearDampingFactorEstimator:
         acceleration_samples_ts = self.workout.acceleration[
             stroke.start_of_recovery_idx: stroke.end_of_recovery_idx + 1
         ]
-        # Speed has 1 extra sample at the beginning, and we include 1 extra sample at the start so we
-        # can interpolate to match the acceleration time series timestamps.
+        # Speed has 1 extra sample at the beginning, and we include 1 extra sample at the start so we can interpolate
+        # to match the acceleration time series timestamps.
         speed_samples_ts = self.workout.speed[
             stroke.start_of_recovery_idx: stroke.end_of_recovery_idx + 2
         ]
@@ -240,22 +240,24 @@ class LinearDampingFactorEstimator:
         )
 
     def get_window(self, acceleration_samples_ts):
-        """Here is where we select a subset of the recovery data points to fit our model to."""
-        MIN_NUM_SAMPLES = 4
+        """Here is where we select a subset of the recovery phase data points to fit our model to."""
+        MIN_NUM_SAMPLES = 3
         CUTOFF_FRACTION = 0.25
 
+        # The recovery phase contains exactly the minimum number of samples required to fit a reasonable model.
+        # Return the input time series as-is.
         if len(acceleration_samples_ts) == MIN_NUM_SAMPLES:
             return acceleration_samples_ts
-        #  There are less than 2 samples in the recovery phase (which can happen if speed is very low), return None
-        #  and let the upper levels decide what to do.
+        # There are less than the minimum number of samples in the recovery phase (which can happen if speed is very
+        # low). Return None and let the upper levels of software decide what to do.
         elif len(acceleration_samples_ts) < MIN_NUM_SAMPLES:
             return None
 
-        # If there's a very long delay between the end of this stroke's drive and the beginning of
-        # the next one, the time window might not include any actual observed data points. Say the
-        # recovery time is 12 seconds but the flywheel was stopped for 10 seconds so there's a
-        # 10-second gap between the last and second-to-last data points in the time series. We need a
-        # resolution-adjusted selection mechanism.
+        # If there's a very long delay between the end of this stroke's drive and the beginning of the next one,
+        # the time window might not include any actual observed data points. Say the recovery time is 12 seconds but
+        # the flywheel was stopped for 10 seconds so there's a 10-second gap between the last and second-to-last data
+        # points in the time series. Here we iteratively drop the last sample of the recovery phase until the middle
+        # 50% window includes sufficient data points to fit a reasonable model to.
         result = TimeSeries()
         last_sample_to_consider_idx = -1
         while len(result) <= MIN_NUM_SAMPLES:
@@ -268,7 +270,7 @@ class LinearDampingFactorEstimator:
             min_time = start_of_recovery_timestamp + offset
             max_time = end_of_recovery_timestamp - offset
             result = acceleration_samples_ts.get_time_slice(min_time, max_time)
-            # Ignore the last sample if the candidate time window didn't include enough data points.
+            # Drop the last sample if the candidate time window didn't include enough data points.
             last_sample_to_consider_idx -= 1
         # Return if the candidate passed the length test
         return result
