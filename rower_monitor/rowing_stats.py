@@ -1,15 +1,11 @@
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-
-################################
-import matplotlib.pyplot as plt
-#################################
-
 from time_series import TimeSeries
 
-# Tracks flywheel speed and acceleration. Assumes the encoder is not properly aligned.
+
 class FlywheelMetricsTracker:
+    # Tracks flywheel speed and acceleration. Assumes the encoder is not properly aligned.
     NUM_ENCODER_PULSES_PER_REVOLUTION = 4
 
     def __init__(
@@ -31,10 +27,6 @@ class FlywheelMetricsTracker:
         if len(self.workout.flywheel_sensor_pulse_timestamps) < self.NUM_ENCODER_PULSES_PER_REVOLUTION + 1:
             return
         speed_data_point, data_point_timestamp = self._get_speed_data_point_estimate()
-        # if (True):
-        #     print(speed_data_point)
-        #     print(self.workout.flywheel_sensor_pulse_timestamps[-10:-1])
-        #     blaaa
         self.workout.speed.append(speed_data_point, data_point_timestamp)
 
     def _get_speed_data_point_estimate(self):
@@ -43,7 +35,7 @@ class FlywheelMetricsTracker:
         # these timestamps is seconds since the start of the workout.
         start_of_revolution_timestamp = self.workout.flywheel_sensor_pulse_timestamps[
             -1 * (self.NUM_ENCODER_PULSES_PER_REVOLUTION + 1)
-            ]
+        ]
         end_of_revolution_timestamp = self.workout.flywheel_sensor_pulse_timestamps[-1]
         # Compute the average speed observed in this revolution, in units of revolutions per second.
         revolution_time = end_of_revolution_timestamp - start_of_revolution_timestamp
@@ -120,14 +112,14 @@ class StrokeMetricsTracker:
             return False
         # Acceleration went from negative to positive
         acceleration_rising_edge = (
-            self.workout.acceleration.values[-1] >= 0 and \
+            self.workout.acceleration.values[-1] >= 0 and
             self.workout.acceleration.values[-2] < 0
         )
         time_since_start_of_stroke_in_seconds = (
-                self.workout.acceleration.timestamps[-1] - self._start_of_ongoing_stroke_timestamp
+            self.workout.acceleration.timestamps[-1] - self._start_of_ongoing_stroke_timestamp
         )
         return acceleration_rising_edge and \
-               (time_since_start_of_stroke_in_seconds > self.MINIMUM_STROKE_DURATION_FILTER)
+            (time_since_start_of_stroke_in_seconds > self.MINIMUM_STROKE_DURATION_FILTER)
 
     def _process_new_stroke(self):
         # For now assume _new_stroke_indicator gives us a perfect segmentation between strokes, and
@@ -143,7 +135,6 @@ class StrokeMetricsTracker:
             ),
             timestamp=self.workout.acceleration.timestamps[start_of_this_stroke_idx],
         )
-
         # The last sample currently in the acceleration time series will be the first sample of the
         # next stroke.
         self._start_of_ongoing_stroke_idx = len(self.workout.acceleration) - 1
@@ -162,20 +153,20 @@ class Stroke:
         self.end_idx = end_idx
         self.num_samples = end_idx - start_idx
 
-        self.segment_stroke()
+        self._segment_stroke()
 
         self.fitted_damping_model = (
             self.workout.damping_model_estimator.fit_model_to_stroke_recovery_data(self)
         )
 
-    def segment_stroke(self):
+    def _segment_stroke(self):
         acceleration_samples = self.workout.acceleration[self.start_idx: self.end_idx].values
         min_acceleration_value = min(acceleration_samples)
         # Get the index (relative to workout.acceleration) of the last occurrence of the smallest acceleration value
         # in this stroke.
-        min_acceleration_value_idx = self.start_idx + \
-                                     len(acceleration_samples) - \
-                                     acceleration_samples[::-1].index(min_acceleration_value)
+        min_acceleration_value_idx = self.start_idx \
+            + len(acceleration_samples) \
+            - acceleration_samples[::-1].index(min_acceleration_value)
         self.start_of_drive_idx = self.start_idx
         self.end_of_drive_idx = min_acceleration_value_idx
         self.start_of_recovery_idx = min_acceleration_value_idx + 1
@@ -215,9 +206,25 @@ class LinearDampingFactorEstimator:
                 break
             next_value_in_ts, next_timestamp_in_ts = speed_samples_ts[idx + 1]
             interpolated_speed_samples_ts.append(
-                value= (value + next_value_in_ts) / 2.0,
+                value=(value + next_value_in_ts) / 2.0,
                 timestamp=(timestamp + next_timestamp_in_ts) / 2.0)
         included_acceleration_samples_ts = self.get_window(acceleration_samples_ts)
+        # This is a very slow-speed stroke and there aren't enough samples to fit the damping model.
+        if included_acceleration_samples_ts is None:
+            # Try to return the same model as the previous stroke
+            if len(self.workout.strokes) > 0:
+                previous_stroke = self.workout.strokes.values[-1]
+                return self.FittedLinearDampingFactorModel(
+                    intercept=previous_stroke.fitted_damping_model.intercept,
+                    slope=previous_stroke.fitted_damping_model.slope
+                )
+            # Return a model wil all-zeros parameters. This will cause us to overestimate the person-applied torque
+            # for this stroke. This is a very slow and weak stroke so this shouldn't matter too much.
+            else:
+                return self.FittedLinearDampingFactorModel(
+                    intercept=0.0,
+                    slope=0.0
+                )
         included_speed_samples_ts = interpolated_speed_samples_ts.get_time_slice(
             start_time=included_acceleration_samples_ts.timestamps[0],
             end_time=included_acceleration_samples_ts.timestamps[-1]
@@ -234,11 +241,15 @@ class LinearDampingFactorEstimator:
 
     def get_window(self, acceleration_samples_ts):
         """Here is where we select a subset of the recovery data points to fit our model to."""
-        MIN_NUM_SAMPLES = 3
+        MIN_NUM_SAMPLES = 4
         CUTOFF_FRACTION = 0.25
 
-        if len(acceleration_samples_ts) <= MIN_NUM_SAMPLES:
+        if len(acceleration_samples_ts) == MIN_NUM_SAMPLES:
             return acceleration_samples_ts
+        #  There are less than 2 samples in the recovery phase (which can happen if speed is very low), return None
+        #  and let the upper levels decide what to do.
+        elif len(acceleration_samples_ts) < MIN_NUM_SAMPLES:
+            return None
 
         # If there's a very long delay between the end of this stroke's drive and the beginning of
         # the next one, the time window might not include any actual observed data points. Say the
