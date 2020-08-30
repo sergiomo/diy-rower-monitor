@@ -8,6 +8,10 @@ import matplotlib
 matplotlib.use('Qt5Agg')
 matplotlib.pyplot.style.use('ggplot')
 
+import data_sources as ds
+import workout as wo
+
+import time
 
 class MplCanvas(FigureCanvas):
 
@@ -34,8 +38,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
     GUI_FONT = QtGui.QFont('Inconsolata', 16)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
+
+        self.workout = wo.WorkoutMetricsTracker(data_source)
 
         # Setup main window layout
         self.main_widget = QtWidgets.QWidget()
@@ -43,12 +49,14 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.main_widget)
         self.app_layout = QtWidgets.QVBoxLayout(self.main_widget)
 
-        # Build button bar, and add it to the top of the main window
+        # Build button bar
         self.button_bar_layout = QtWidgets.QHBoxLayout()
         self.start_button = QtWidgets.QPushButton('Start')
         self.stop_button = QtWidgets.QPushButton('Stop')
+        # Appearance
         self.start_button.setFont(self.GUI_FONT)
         self.stop_button.setFont(self.GUI_FONT)
+        # Add to main window
         self.button_bar_layout.addWidget(self.start_button)
         self.button_bar_layout.addWidget(self.stop_button)
         self.app_layout.addLayout(self.button_bar_layout)
@@ -58,21 +66,25 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.workout_label = QtWidgets.QLabel('Workout')
         self.time_label = QtWidgets.QLabel('0:00')
         self.distance_label = QtWidgets.QLabel('0 revs')
-
+        # Appearance
         self.workout_label.setFont(self.GUI_FONT)
         self.time_label.setFont(self.GUI_FONT)
         self.distance_label.setFont(self.GUI_FONT)
         self.workout_label.setAlignment(QtCore.Qt.AlignCenter)
         self.time_label.setAlignment(QtCore.Qt.AlignCenter)
         self.distance_label.setAlignment(QtCore.Qt.AlignCenter)
-
+        # Add to main window
         self.stats_bar_layout.addWidget(self.workout_label)
         self.stats_bar_layout.addWidget(self.time_label)
         self.stats_bar_layout.addWidget(self.distance_label)
         self.app_layout.addLayout(self.stats_bar_layout)
 
         # Add chart
-        self.canvas = MplCanvas(self, width=16, height=4, dpi=100)
+        # fig = Figure(figsize=(10, 4), dpi=300, tight_layout=True)
+        # fig.axes = fig.add_subplot(111)
+        # super(MplCanvas, self).__init__(fig)
+
+        self.canvas = MplCanvas(self, width=10, height=4, dpi=100)
         self.app_layout.addWidget(self.canvas)
 
         #########################################################################S
@@ -81,8 +93,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         # We need to store a reference to the plotted line
         # somewhere, so we can apply the new data to it.
-        self._plot_ref = None
-        self.update_plot()
+        self._plot_ref, self.old_size = self.init_plot()
+        self.canvas.draw_idle()
         #########################################################################
 
         # Set interaction behavior
@@ -91,24 +103,42 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         # Setup a timer to trigger the redraw by calling update_plot.
         self.timer = QtCore.QTimer()
-        self.timer.setInterval(16)
+        self.timer.setInterval(1000)
         self.timer.timeout.connect(self.timer_tick)
 
         self.show()
 
     def start(self):
+        self.start_timestamp = QtCore.QTime.currentTime()
         self.timer.start()
+        self.workout.start(self.ui_callback)
 
     def stop(self):
         self.timer.stop()
+        self.workout.stop()
+
+    def ui_callback(self, workout):
+        # Update distance
+        distance = workout.num_flywheel_revolutions
+        self.distance_label.setText('%d revs' % distance)
+        if len(workout.torque) > 0:
+            self.workout_label.setText(str(workout.torque.values[-1]))
+            self.ydata = self.ydata[1:] + [workout.torque.values[-1]]
+            self.xdata = self.xdata[1:] + [workout.torque.timestamps[-1]]
+            print('Hi!')
+            self.update_plot()
 
     def timer_tick(self):
-        self.update_data()
-        self.update_plot()
+        # Workout time
+        time_since_start = self.start_timestamp.secsTo(QtCore.QTime.currentTime())
+        minutes = time_since_start // 60
+        seconds = time_since_start % 60
+        time_string = '%d:%02d' % (minutes, seconds)
+        self.time_label.setText(time_string)
 
-    def update_data(self):
-        # Drop off the first y element, append a new one.
-        self.ydata = self.ydata[1:] + [random.randint(0, 10)]
+    #def update_data(self):
+    #    # Drop off the first y element, append a new one.
+    #    self.ydata = self.ydata[1:] + [random.randint(0, 10)]
 
     def _set_cache_plot_background(self):
         self.canvas.axes.clear()
@@ -119,31 +149,36 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.canvas.draw()
         self.canvas.background = self.canvas.copy_from_bbox(self.canvas.axes.bbox)
 
-    def update_plot(self):
-        # Note: we no longer need to clear the axis.
-        if self._plot_ref is None:
-            self._set_cache_plot_background()
-            # First time we have no plot reference, so do a normal plot.
-            # .plot returns a list of line <reference>s, as we're
-            # only getting one we can take the first element.
-            plot_refs = self.canvas.axes.plot(self.xdata, self.ydata, 'r')
-            self._plot_ref = plot_refs[0]
-            self.old_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
-        else:
-            # We have a reference, we can use it to update the data for that line.
-            self._plot_ref.set_ydata(self.ydata)
+    def init_plot(self):
+        self._set_cache_plot_background()
+        # First time we have no plot reference, so do a normal plot.
+        # .plot returns a list of line <reference>s, as we're
+        # only getting one we can take the first element.
+        plot_refs = self.canvas.axes.plot(self.xdata, self.ydata, 'r')
+        plot_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
+        return plot_refs[0], plot_size
 
-        current_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
-        if current_size != self.old_size:
-            self._set_cache_plot_background()
-            self.old_size = current_size
+    def update_plot(self):
+        # We have a reference, we can use it to update the data for that line.
+        self._plot_ref.set_ydata(self.ydata)
+
+
+        self.canvas.draw()
+        return
+
+        #current_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
+        #if current_size != self.old_size:
+        #    self._set_cache_plot_background()
+        #    self.old_size = current_size
 
         # Trigger the canvas to update and redraw.
         self.canvas.restore_region(self.canvas.background)
         self.canvas.axes.draw_artist(self._plot_ref)
         self.canvas.blit(self.canvas.axes.bbox)
 
+csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-30 09h20m55s.csv",  sample_delay=True)
+
 
 app = QtWidgets.QApplication(sys.argv)
-w = RowingMonitorMainWindow()
+w = RowingMonitorMainWindow(csv_source)
 app.exec_()

@@ -1,6 +1,7 @@
 import csv
 import pigpio
-
+import time
+import threading
 
 class DataSource:
     def __init__(self):
@@ -117,6 +118,7 @@ class CsvFile(PiGpioClient):
         sensor_pulse_event_handler_callback,
         ticks_csv_file_path,
         raw_ticks_column_name="ticks",
+        sample_delay=False
     ):
         self.sensor_pulse_event_handler_callback = sensor_pulse_event_handler_callback
         self.ticks_csv_file_path = ticks_csv_file_path
@@ -124,18 +126,56 @@ class CsvFile(PiGpioClient):
         self._first_raw_tick_value = None
         self._last_raw_tick_value = None
         self._num_rpi_counter_rollovers = 0
+        self.sample_delay = sample_delay
+        self._reader_thread = None
 
     def start(self, sensor_pulse_event_handler_callback):
-        with open(self.ticks_csv_file_path) as input_file:
-            csv_reader = csv.DictReader(input_file)
-            for row in csv_reader:
-                raw_ticks = int(row[self.raw_ticks_column_name])
-                if raw_ticks == self.DUMMY_VALUE:
-                    continue
-                sensor_pulse_event_handler_callback(
-                    self.get_timestamp_from_raw_ticks(raw_ticks),
-                    raw_ticks
-                )
+        self._reader_thread = CsvReaderThread(
+            #file_path=self.ticks_csv_file_path,
+            sensor_pulse_event_handler_callback=sensor_pulse_event_handler_callback,
+            parent=self
+        )
+        # with open(self.ticks_csv_file_path) as input_file:
+        #     csv_reader = csv.DictReader(input_file)
+        #     for row in csv_reader:
+        #         raw_ticks = int(row[self.raw_ticks_column_name])
+        #         if raw_ticks == self.DUMMY_VALUE:
+        #             continue
+        #         sensor_pulse_event_handler_callback(
+        #             self.get_timestamp_from_raw_ticks(raw_ticks),
+        #             raw_ticks
+        #         )
+        #         if self.sample_delay:
+        #             time.sleep(0.016)
 
     def stop(self):
-        return
+        if self._reader_thread is not None:
+            self._reader_thread.stop()
+
+
+class CsvReaderThread(threading.Thread):
+    def __init__(self, sensor_pulse_event_handler_callback, parent):
+        threading.Thread.__init__(self)
+        self.parent = parent
+        self.input_file = open(self.parent.ticks_csv_file_path)
+        self.csv_reader = csv.DictReader(self.input_file)
+        self.sensor_pulse_event_handler_callback = sensor_pulse_event_handler_callback
+        self.go = True
+        self.start()
+
+    def run(self):
+        for row in self.csv_reader:
+            if not self.go:
+                break
+            raw_ticks = int(row[self.parent.raw_ticks_column_name])
+            if raw_ticks == self.parent.DUMMY_VALUE:
+                continue
+            self.sensor_pulse_event_handler_callback(
+                self.parent.get_timestamp_from_raw_ticks(raw_ticks),
+                raw_ticks
+            )
+            if self.parent.sample_delay:
+                time.sleep(0.016)
+
+    def stop(self):
+        self.go = False
