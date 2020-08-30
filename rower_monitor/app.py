@@ -20,19 +20,10 @@ class MplCanvas(FigureCanvas):
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
-    # def my_update(self):
-    #     """
-    #     Efficiently update the figure, without needing to redraw the
-    #     "background" artists.
-    #     """
-    #     self.fig.canvas.restore_region(self.background)
-    #     self.ax.draw_artist(self.points)
-    #     self.fig.canvas.blit(self.fig.bbox)
-
 
 class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
-    PLOT_VISIBLE_SAMPLES = 40
+    PLOT_VISIBLE_SAMPLES = 200
     PLOT_MIN_Y = -10
     PLOT_MAX_Y = 55
 
@@ -42,6 +33,9 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
 
         self.workout = wo.WorkoutMetricsTracker(data_source)
+
+        # Connect workut emitter to UI update
+        self.workout._qt_emitter.updated.connect(self.ui_callback)
 
         # Setup main window layout
         self.main_widget = QtWidgets.QWidget()
@@ -88,7 +82,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.app_layout.addWidget(self.canvas)
 
         #########################################################################S
-        self.xdata = list(range(self.PLOT_VISIBLE_SAMPLES))
+        self.xdata = [0 for i in range(self.PLOT_VISIBLE_SAMPLES)]
         self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
 
         # We need to store a reference to the plotted line
@@ -109,23 +103,21 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.show()
 
     def start(self):
-        self.start_timestamp = QtCore.QTime.currentTime()
+        self.start_timestamp = QtCore.QTime.currentTime()  # TODO: start timestamp is when the first encoder pulse occurs
         self.timer.start()
-        self.workout.start(self.ui_callback)
+        self.workout.start(None)
 
     def stop(self):
         self.timer.stop()
         self.workout.stop()
 
-    def ui_callback(self, workout):
+    def ui_callback(self):
         # Update distance
-        distance = workout.num_flywheel_revolutions
+        distance = self.workout.num_flywheel_revolutions
         self.distance_label.setText('%d revs' % distance)
-        if len(workout.torque) > 0:
-            self.workout_label.setText(str(workout.torque.values[-1]))
-            self.ydata = self.ydata[1:] + [workout.torque.values[-1]]
-            self.xdata = self.xdata[1:] + [workout.torque.timestamps[-1]]
-            print('Hi!')
+        if len(self.workout.torque) > 0:
+            self.ydata = self.ydata[1:] + [self.workout.torque.values[-1]]
+            self.xdata = self.xdata[1:] + [self.workout.torque.timestamps[-1]]
             self.update_plot()
 
     def timer_tick(self):
@@ -136,14 +128,9 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         time_string = '%d:%02d' % (minutes, seconds)
         self.time_label.setText(time_string)
 
-    #def update_data(self):
-    #    # Drop off the first y element, append a new one.
-    #    self.ydata = self.ydata[1:] + [random.randint(0, 10)]
-
     def _set_cache_plot_background(self):
         self.canvas.axes.clear()
         self.canvas.axes.set_ylim(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
-        self.canvas.axes.set_xlim(0, self.PLOT_VISIBLE_SAMPLES)
         self.canvas.axes.grid()
         self.canvas.axes.set_axis_off()
         self.canvas.draw()
@@ -161,22 +148,23 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     def update_plot(self):
         # We have a reference, we can use it to update the data for that line.
         self._plot_ref.set_ydata(self.ydata)
+        self._plot_ref.set_xdata(self.xdata)
+        self.canvas.axes.set_xlim(self.xdata[-1]-8, self.xdata[-1])
 
+        #self.canvas.draw_idle()
+        #return
 
-        self.canvas.draw()
-        return
-
-        #current_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
-        #if current_size != self.old_size:
-        #    self._set_cache_plot_background()
-        #    self.old_size = current_size
+        current_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
+        if current_size != self.old_size:
+            self._set_cache_plot_background()
+            self.old_size = current_size
 
         # Trigger the canvas to update and redraw.
         self.canvas.restore_region(self.canvas.background)
         self.canvas.axes.draw_artist(self._plot_ref)
         self.canvas.blit(self.canvas.axes.bbox)
 
-csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-30 09h20m55s.csv",  sample_delay=True)
+csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",  sample_delay=True)
 
 
 app = QtWidgets.QApplication(sys.argv)
