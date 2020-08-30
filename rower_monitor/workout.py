@@ -26,6 +26,7 @@ class WorkoutMetricsTracker:
         # We store the raw ticks for debugging and to facilitate future development.
         self.raw_ticks = []
         self.flywheel_sensor_pulse_timestamps = []
+        self.num_flywheel_revolutions = 0
         self.speed = TimeSeries()
         self.acceleration = TimeSeries()
         self.torque = TimeSeries()
@@ -41,6 +42,7 @@ class WorkoutMetricsTracker:
 
     def flywheel_sensor_pulse_handler(self, sensor_pulse_time, raw_tick_value):
         self.raw_ticks.append(raw_tick_value)
+        self.num_flywheel_revolutions += 1.0 / self.flywheel_metrics_tracker.NUM_ENCODER_PULSES_PER_REVOLUTION
         self.flywheel_sensor_pulse_timestamps.append(sensor_pulse_time)
         self.flywheel_metrics_tracker.update()
         # self._update_tick_stats()
