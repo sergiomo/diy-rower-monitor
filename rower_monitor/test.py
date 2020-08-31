@@ -8,12 +8,17 @@ import matplotlib.pyplot as plt
 #csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-10 09h54m05s.csv")
 #csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-22 21h39m58s.csv")
 #csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-20 17h25m29s.csv")
-csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-30 09h20m55s.csv", sample_delay=False)
+csv_source = ds.CsvFile(
+    "C:\\Users\\checo\\Desktop\\rower\\2020-06-30 09h20m55s.csv",
+    threaded=False,
+    sample_delay=False,
+)
 
 workout = wo.WorkoutMetricsTracker(csv_source)
 workout.start()
-time.sleep(4)
 workout.stop()
+
+workout.save('')
 print(workout.num_flywheel_revolutions)
 
 print('done')

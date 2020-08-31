@@ -1,4 +1,9 @@
+import csv
+import os
+import datetime
+
 from time_series import TimeSeries
+import data_sources as ds
 import rowing_stats
 
 # MY_HARDWARE_SETUP = {
@@ -62,6 +67,18 @@ class WorkoutMetricsTracker:
             self._qt_signal_emitter.updated.emit()
         elif self._ui_callback is not None:
             self._ui_callback(self)
+
+    def save(self, output_folder_path):
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %Hh%Mm%Ss")
+        output_file_name = timestamp + ".csv"
+        output_file_path = os.path.join(output_folder_path, output_file_name)
+        with open(output_file_path, "w", newline="") as output_file:
+            csv_writer = csv.writer(output_file)
+            csv_writer.writerow(
+                [ds.CsvFile.RAW_TICKS_COLUMN_NAME]
+            )
+            csv_writer.writerows([[x] for x in self.raw_ticks])
+        return
 
 
 

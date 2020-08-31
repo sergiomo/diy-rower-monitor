@@ -10,7 +10,6 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 matplotlib.use('Qt5Agg')
-matplotlib.pyplot.style.use('ggplot')
 
 
 # Idea taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
@@ -41,6 +40,7 @@ class MplCanvas(FigureCanvas):
 
 
 class RowingMonitorMainWindow(QtWidgets.QMainWindow):
+    LOG_FOLDER_PATH = 'C:\\Users\\checo\\Dropbox\\rower\\logs'
 
     PLOT_VISIBLE_SAMPLES = 200
     PLOT_MIN_Y = -10
@@ -130,7 +130,6 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         if self.started:
             return
         self.started = True
-        self.start_timestamp = QtCore.QTime.currentTime()  # TODO: start timestamp is when the first encoder pulse occurs
         self.timer.start()
         self.workout.start(qt_signal_emitter=self.workout_qt_emitter)
 
@@ -140,8 +139,12 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.started = False
         self.timer.stop()
         self.workout.stop()
+        self.workout.save(output_folder_path=self.LOG_FOLDER_PATH)
 
     def ui_callback(self):
+        # If this is the first pulse, capture the current time
+        if self.start_timestamp is None:
+            self.start_timestamp = QtCore.QTime.currentTime()
         # Update distance
         distance = self.workout.num_flywheel_revolutions
         self.distance_label.setText('%d revs' % distance)
@@ -151,7 +154,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.update_plot()
 
     def timer_tick(self):
-        # Workout time
+        # Do nothing if we haven't received an encoder pulse yet.
+        if self.start_timestamp is None:
+            return
+        # Update workout time label
         time_since_start = self.start_timestamp.secsTo(QtCore.QTime.currentTime())
         minutes = time_since_start // 60
         seconds = time_since_start % 60
@@ -209,7 +215,13 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
                 self.canvas.blit(self.canvas.axes.bbox)
 
 
-csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",  sample_delay=True)
+data_source = ds.CsvFile(
+    "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",
+    sample_delay=True,
+    threaded=True
+)
+#data_source = ds.PiGpioClient(ip_address='192.168.1.130', pigpio_port=9876, gpio_pin_number=17)
+print('Connected!')
 app = QtWidgets.QApplication(sys.argv)
-w = RowingMonitorMainWindow(csv_source)
+w = RowingMonitorMainWindow(data_source)
 app.exec_()
