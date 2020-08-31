@@ -1,23 +1,33 @@
-from PyQt5 import QtCore, QtWidgets, QtGui
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-
 import sys
-import random
 import matplotlib
-matplotlib.use('Qt5Agg')
-matplotlib.pyplot.style.use('ggplot')
 
 import data_sources as ds
 import workout as wo
 
-import time
+from threading import Lock
+from PyQt5 import QtCore, QtWidgets, QtGui
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+matplotlib.use('Qt5Agg')
+matplotlib.pyplot.style.use('ggplot')
+
 
 class MplCanvas(FigureCanvas):
+    PLOT_MIN_Y = -10
+    PLOT_MAX_Y = 55
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True)
-        self.axes = fig.add_subplot(111)
+    def __init__(self, width, height, dpi):
+        fig = Figure(
+            figsize=(width, height),
+            dpi=dpi,
+            frameon=False,
+            tight_layout=False,
+        )
+        self.axes = fig.add_axes([0,0,1,1], frameon=False)
+        self.axes.get_xaxis().set_visible(False)
+        self.axes.get_yaxis().set_visible(False)
+        self.axes.set_ylim(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
         super(MplCanvas, self).__init__(fig)
 
 
@@ -26,12 +36,18 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_VISIBLE_SAMPLES = 200
     PLOT_MIN_Y = -10
     PLOT_MAX_Y = 55
+    PLOT_TIME_WINDOW_SECONDS = 7
+    PLOT_WIDTH_INCHES = 2
+    PLOT_HEIGHT_INCHES = 1
+    PLOT_DPI = 200
+    PLOT_FAST_DRAWING = False
 
-    GUI_FONT = QtGui.QFont('Inconsolata', 16)
+    GUI_FONT = QtGui.QFont('Consolas', 12)
 
     def __init__(self, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
 
+        self.redraw_lock = Lock()
         self.workout = wo.WorkoutMetricsTracker(data_source)
 
         # Connect workut emitter to UI update
@@ -74,31 +90,25 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.app_layout.addLayout(self.stats_bar_layout)
 
         # Add chart
-        # fig = Figure(figsize=(10, 4), dpi=300, tight_layout=True)
-        # fig.axes = fig.add_subplot(111)
-        # super(MplCanvas, self).__init__(fig)
-
-        self.canvas = MplCanvas(self, width=10, height=4, dpi=100)
+        self.canvas = MplCanvas(width=self.PLOT_WIDTH_INCHES,
+                                height=self.PLOT_HEIGHT_INCHES,
+                                dpi=self.PLOT_DPI)
         self.app_layout.addWidget(self.canvas)
-
-        #########################################################################S
-        self.xdata = [0 for i in range(self.PLOT_VISIBLE_SAMPLES)]
+        # Initialize chart, and set things up for fast drawing.
+        self.xdata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
         self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
-
-        # We need to store a reference to the plotted line
-        # somewhere, so we can apply the new data to it.
-        self._plot_ref, self.old_size = self.init_plot()
-        self.canvas.draw_idle()
-        #########################################################################
+        self.torque_plot, self.old_size = self.init_plot()
 
         # Set interaction behavior
         self.start_button.clicked.connect(self.start)
         self.stop_button.clicked.connect(self.stop)
 
-        # Setup a timer to trigger the redraw by calling update_plot.
+        # Update workout duration every second
         self.timer = QtCore.QTimer()
         self.timer.setInterval(1000)
         self.timer.timeout.connect(self.timer_tick)
+
+        self.start_timestamp = None
 
         self.show()
 
@@ -128,45 +138,58 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         time_string = '%d:%02d' % (minutes, seconds)
         self.time_label.setText(time_string)
 
-    def _set_cache_plot_background(self):
-        self.canvas.axes.clear()
+    def draw_and_cache_plot_background(self, force_draw):
+        #self.canvas.axes.clear()
         self.canvas.axes.set_ylim(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
-        self.canvas.axes.grid()
+        #self.canvas.axes.grid()
         self.canvas.axes.set_axis_off()
-        self.canvas.draw()
+        #self.canvas.axes.get_xaxis().set_visible(False)
+        #self.canvas.axes.get_yaxis().set_visible(False)
+
+        if force_draw:
+            self.canvas.draw()
+        else:
+            self.canvas.draw_idle()
         self.canvas.background = self.canvas.copy_from_bbox(self.canvas.axes.bbox)
 
     def init_plot(self):
-        self._set_cache_plot_background()
-        # First time we have no plot reference, so do a normal plot.
-        # .plot returns a list of line <reference>s, as we're
-        # only getting one we can take the first element.
-        plot_refs = self.canvas.axes.plot(self.xdata, self.ydata, 'r')
-        plot_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
-        return plot_refs[0], plot_size
+        with self.redraw_lock:
+            # Draw a blank plot and cache the background.
+            self.draw_and_cache_plot_background(force_draw=True)
+            # Return a reference to the plot and its current size. The size is used to force a full redraw if the window
+            # in resized.
+            plot_refs = self.canvas.axes.plot(self.xdata, self.ydata)
+            plot_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
+            return plot_refs[0], plot_size
 
     def update_plot(self):
-        # We have a reference, we can use it to update the data for that line.
-        self._plot_ref.set_ydata(self.ydata)
-        self._plot_ref.set_xdata(self.xdata)
-        self.canvas.axes.set_xlim(self.xdata[-1]-8, self.xdata[-1])
+        # Update data and adjust visible window along the X axis.
+        with self.redraw_lock:
+            if not self.PLOT_FAST_DRAWING:
+                self.torque_plot.set_ydata(self.ydata)
+                self.torque_plot.set_xdata(self.xdata)
+                self.canvas.axes.set_xlim(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
+                self.canvas.draw_idle()
+            else:
+                # Force a full redraw if the window has been resized.
+                current_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
+                if current_size != self.old_size:
+                    self.torque_plot.set_xdata([None])
+                    self.torque_plot.set_ydata([None])
+                    self.draw_and_cache_plot_background(force_draw=True)
+                    self.old_size = current_size
 
-        #self.canvas.draw_idle()
-        #return
+                self.torque_plot.set_ydata(self.ydata)
+                self.torque_plot.set_xdata(self.xdata)
+                self.canvas.axes.set_xlim(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
 
-        current_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
-        if current_size != self.old_size:
-            self._set_cache_plot_background()
-            self.old_size = current_size
+                # Fast drawing. Restore the cached background, and draw the plot line.
+                self.canvas.restore_region(self.canvas.background)
+                self.canvas.axes.draw_artist(self.torque_plot)
+                self.canvas.blit(self.canvas.axes.bbox)
 
-        # Trigger the canvas to update and redraw.
-        self.canvas.restore_region(self.canvas.background)
-        self.canvas.axes.draw_artist(self._plot_ref)
-        self.canvas.blit(self.canvas.axes.bbox)
 
 csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",  sample_delay=True)
-
-
 app = QtWidgets.QApplication(sys.argv)
 w = RowingMonitorMainWindow(csv_source)
 app.exec_()
