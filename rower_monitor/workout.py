@@ -1,6 +1,5 @@
 from time_series import TimeSeries
 import rowing_stats
-from PyQt5 import QtCore
 
 # MY_HARDWARE_SETUP = {
 #     rpi ip = 192.168.1.242
@@ -10,13 +9,6 @@ from PyQt5 import QtCore
 #     flywheel sensor pulses per rev = 4
 #     flywheel sensor pulses are evenly spaced = false
 # }
-
-# Taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
-class Task(QtCore.QObject):
-    updated = QtCore.pyqtSignal()
-    def __init__(self):
-        """ If useEmit True, emits a signal. If False, uses a callback. """
-        super(Task, self).__init__()
 
 
 class WorkoutMetricsTracker:
@@ -41,10 +33,11 @@ class WorkoutMetricsTracker:
         self.torque = TimeSeries()
         self.strokes = TimeSeries()
         self._ui_callback = None
-        self._qt_emitter = Task()
+        self._qt_signal_emitter = None
 
-    def start(self, ui_callback=None):
+    def start(self, ui_callback=None, qt_signal_emitter=None):
         self._ui_callback = ui_callback
+        self._qt_signal_emitter = qt_signal_emitter
         self.data_source.start(self.flywheel_sensor_pulse_handler)
 
     def stop(self):
@@ -63,12 +56,13 @@ class WorkoutMetricsTracker:
         #     self._process_new_stroke()
         #     self._update_stroke_stats()
 
-
         self.stroke_metrics_tracker.update()
 
-        if self._ui_callback is not None:
+        if self._qt_signal_emitter is not None:
+            self._qt_signal_emitter.updated.emit()
+        elif self._ui_callback is not None:
             self._ui_callback(self)
-        self._qt_emitter.updated.emit()
+
 
 
 """

@@ -13,6 +13,14 @@ matplotlib.use('Qt5Agg')
 matplotlib.pyplot.style.use('ggplot')
 
 
+# Idea taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
+class SignalEmitter(QtCore.QObject):
+    updated = QtCore.pyqtSignal()
+
+    def __init__(self):
+        super(SignalEmitter, self).__init__()
+
+
 class MplCanvas(FigureCanvas):
     PLOT_MIN_Y = -10
     PLOT_MAX_Y = 55
@@ -21,7 +29,8 @@ class MplCanvas(FigureCanvas):
         fig = Figure(
             figsize=(width, height),
             dpi=dpi,
-            frameon=False,
+            facecolor='#3D3D3D',
+            frameon=True,
             tight_layout=False,
         )
         self.axes = fig.add_axes([0,0,1,1], frameon=False)
@@ -39,10 +48,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_TIME_WINDOW_SECONDS = 7
     PLOT_WIDTH_INCHES = 2
     PLOT_HEIGHT_INCHES = 1
-    PLOT_DPI = 200
+    PLOT_DPI = 300
     PLOT_FAST_DRAWING = False
 
-    GUI_FONT = QtGui.QFont('Consolas', 12)
+    GUI_FONT = QtGui.QFont('Roboto Mono', 12)
 
     def __init__(self, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
@@ -51,13 +60,15 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.workout = wo.WorkoutMetricsTracker(data_source)
 
         # Connect workut emitter to UI update
-        self.workout._qt_emitter.updated.connect(self.ui_callback)
+        self.workout_qt_emitter = SignalEmitter()
+        self.workout_qt_emitter.updated.connect(self.ui_callback)
 
         # Setup main window layout
         self.main_widget = QtWidgets.QWidget()
         self.main_widget.setFocus()
         self.setCentralWidget(self.main_widget)
         self.app_layout = QtWidgets.QVBoxLayout(self.main_widget)
+        self.app_layout.setContentsMargins(60, 60, 60, 60) #(left, top, right, bottom)
 
         # Build button bar
         self.button_bar_layout = QtWidgets.QHBoxLayout()
@@ -69,6 +80,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         # Add to main window
         self.button_bar_layout.addWidget(self.start_button)
         self.button_bar_layout.addWidget(self.stop_button)
+        self.button_bar_layout.setContentsMargins(0, 0, 0, 30)
         self.app_layout.addLayout(self.button_bar_layout)
 
         # Build workout stats bar
@@ -87,6 +99,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.stats_bar_layout.addWidget(self.workout_label)
         self.stats_bar_layout.addWidget(self.time_label)
         self.stats_bar_layout.addWidget(self.distance_label)
+        self.stats_bar_layout.setContentsMargins(0, 0, 0, 30)
         self.app_layout.addLayout(self.stats_bar_layout)
 
         # Add chart
@@ -109,15 +122,22 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.timer.timeout.connect(self.timer_tick)
 
         self.start_timestamp = None
+        self.started = False
 
         self.show()
 
     def start(self):
+        if self.started:
+            return
+        self.started = True
         self.start_timestamp = QtCore.QTime.currentTime()  # TODO: start timestamp is when the first encoder pulse occurs
         self.timer.start()
-        self.workout.start(None)
+        self.workout.start(qt_signal_emitter=self.workout_qt_emitter)
 
     def stop(self):
+        if not self.started:
+            return
+        self.started = False
         self.timer.stop()
         self.workout.stop()
 
@@ -158,7 +178,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.draw_and_cache_plot_background(force_draw=True)
             # Return a reference to the plot and its current size. The size is used to force a full redraw if the window
             # in resized.
-            plot_refs = self.canvas.axes.plot(self.xdata, self.ydata)
+            plot_refs = self.canvas.axes.plot(self.xdata, self.ydata, linewidth=1.0, color='#63B8FF') #color='#E9E9E9')
             plot_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
             return plot_refs[0], plot_size
 
