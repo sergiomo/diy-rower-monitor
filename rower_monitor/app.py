@@ -28,7 +28,7 @@ class MplCanvas(FigureCanvas):
         fig = Figure(
             figsize=(width, height),
             dpi=dpi,
-            facecolor='#3D3D3D',
+            facecolor='#2c2c2c',
             frameon=True,
             tight_layout=False,
         )
@@ -51,7 +51,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_DPI = 300
     PLOT_FAST_DRAWING = False
 
-    GUI_FONT = QtGui.QFont('Roboto Mono', 12)
+    GUI_FONT = QtGui.QFont('Roboto Mono', 10)
 
     def __init__(self, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
@@ -74,6 +74,9 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.button_bar_layout = QtWidgets.QHBoxLayout()
         self.start_button = QtWidgets.QPushButton('Start')
         self.stop_button = QtWidgets.QPushButton('Stop')
+        #self.stop_button.setStyleSheet(
+        #    'background-color: #E03A3E; border: none; color: #ffffff'
+        #)
         # Appearance
         self.start_button.setFont(self.GUI_FONT)
         self.stop_button.setFont(self.GUI_FONT)
@@ -103,10 +106,16 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.app_layout.addLayout(self.stats_bar_layout)
 
         # Add chart
+        self.torque_plot_box = QtWidgets.QGroupBox('Torque')
+        self.torque_plot_box.setAlignment(QtCore.Qt.AlignHCenter)
+        self.torque_plot_box.setFont(self.GUI_FONT)
         self.canvas = MplCanvas(width=self.PLOT_WIDTH_INCHES,
                                 height=self.PLOT_HEIGHT_INCHES,
                                 dpi=self.PLOT_DPI)
-        self.app_layout.addWidget(self.canvas)
+        self.torque_plot_box_layout = QtWidgets.QVBoxLayout()
+        self.torque_plot_box_layout.addWidget(self.canvas)
+        self.torque_plot_box.setLayout(self.torque_plot_box_layout)
+        self.app_layout.addWidget(self.torque_plot_box)
         # Initialize chart, and set things up for fast drawing.
         self.xdata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
         self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
@@ -184,7 +193,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.draw_and_cache_plot_background(force_draw=True)
             # Return a reference to the plot and its current size. The size is used to force a full redraw if the window
             # in resized.
-            plot_refs = self.canvas.axes.plot(self.xdata, self.ydata, linewidth=1.0, color='#63B8FF') #color='#E9E9E9')
+            plot_refs = self.canvas.axes.plot(self.xdata, self.ydata, linewidth=1.0, color='#4cadda') #color='#E9E9E9')
             plot_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
             return plot_refs[0], plot_size
 
@@ -220,8 +229,10 @@ data_source = ds.CsvFile(
     sample_delay=True,
     threaded=True
 )
-#data_source = ds.PiGpioClient(ip_address='192.168.1.130', pigpio_port=9876, gpio_pin_number=17)
-print('Connected!')
+
+data_source = ds.PiGpioClient(ip_address='192.168.1.130', pigpio_port=9876, gpio_pin_number=17)
+#print('Connected!')
+#sys.argv += ['--style', 'windowsvista']
 app = QtWidgets.QApplication(sys.argv)
 w = RowingMonitorMainWindow(data_source)
 app.exec_()
