@@ -6,6 +6,10 @@ import workout as wo
 
 from threading import Lock
 from PyQt5 import QtCore, QtWidgets, QtGui
+from PyQt5.QtCore import QPointF
+from PyQt5.QtGui import QPainter, QColor
+from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis, QAreaSeries
+
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -40,6 +44,9 @@ class MplCanvas(FigureCanvas):
 
 
 class RowingMonitorMainWindow(QtWidgets.QMainWindow):
+
+    DEV_MODE = True
+
     LOG_FOLDER_PATH = 'C:\\Users\\checo\\Dropbox\\rower\\logs'
 
     PLOT_VISIBLE_SAMPLES = 200
@@ -121,6 +128,46 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
         self.torque_plot, self.old_size = self.init_plot()
 
+
+
+
+        ############################################
+        self.torque_plot_2_series = QLineSeries(self)
+        for i in range(self.PLOT_VISIBLE_SAMPLES):
+            self.torque_plot_2_series.append(0, 0)
+
+        self.torque_plot_2_series.setColor(QColor('blue'))
+
+        self.tp2_horizontal_axis = QValueAxis()
+        self.tp2_vertical_axis = QValueAxis()
+
+        self.torque_plot_2 = QChart()
+
+        self.torque_plot_2.addSeries(self.torque_plot_2_series)
+        self.torque_plot_2.addAxis(self.tp2_vertical_axis, QtCore.Qt.AlignLeft)
+        self.torque_plot_2.addAxis(self.tp2_horizontal_axis, QtCore.Qt.AlignBottom)
+
+        self.torque_plot_2_series.attachAxis(self.tp2_horizontal_axis)
+        self.torque_plot_2_series.attachAxis(self.tp2_vertical_axis)
+
+        self.tp2_vertical_axis.setRange(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
+        self.tp2_vertical_axis.setTickCount(1)
+        self.tp2_vertical_axis.setVisible(False)
+        self.tp2_horizontal_axis.setRange(-8, 0)
+        self.tp2_horizontal_axis.setVisible(False)
+        self.tp2_vertical_axis.setTickCount(10)
+
+
+
+        #self.torque_plot_2.setAnimationOptions(QChart.GridAxisAnimations)
+        self.torque_plot_2.legend().setVisible(False)
+        chartview = QChartView(self.torque_plot_2)
+        chartview.setRenderHint(QPainter.Antialiasing)
+        chartview.setMinimumHeight(250)
+        chartview.resize(250, 250)
+        self.app_layout.addWidget(chartview)
+        ############################################
+
         # Set interaction behavior
         self.start_button.clicked.connect(self.start)
         self.stop_button.clicked.connect(self.stop)
@@ -135,6 +182,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         self.show()
 
+    def update_plot_2(self):
+        self.torque_plot_2_series.append(self.xdata[-1], self.ydata[-1])
+        self.torque_plot_2_series.remove(0)
+        self.tp2_horizontal_axis.setRange(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
+
     def start(self):
         if self.started:
             return
@@ -148,7 +200,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.started = False
         self.timer.stop()
         self.workout.stop()
-        self.workout.save(output_folder_path=self.LOG_FOLDER_PATH)
+        if not self.DEV_MODE:
+            self.workout.save(output_folder_path=self.LOG_FOLDER_PATH)
 
     def ui_callback(self):
         # If this is the first pulse, capture the current time
@@ -198,6 +251,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             return plot_refs[0], plot_size
 
     def update_plot(self):
+        self.update_plot_2()
         # Update data and adjust visible window along the X axis.
         with self.redraw_lock:
             if not self.PLOT_FAST_DRAWING:
@@ -230,9 +284,10 @@ data_source = ds.CsvFile(
     threaded=True
 )
 
-data_source = ds.PiGpioClient(ip_address='192.168.1.130', pigpio_port=9876, gpio_pin_number=17)
+#data_source = ds.PiGpioClient(ip_address='192.168.1.130', pigpio_port=9876, gpio_pin_number=17)
 #print('Connected!')
 #sys.argv += ['--style', 'windowsvista']
 app = QtWidgets.QApplication(sys.argv)
 w = RowingMonitorMainWindow(data_source)
+#w.resize(600, 800)
 app.exec_()
