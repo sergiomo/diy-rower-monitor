@@ -136,13 +136,22 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         for i in range(self.PLOT_VISIBLE_SAMPLES):
             self.torque_plot_2_series.append(0, 0)
 
-        self.torque_plot_2_series.setColor(QColor('blue'))
+        #self.torque_plot_2_series.setColor(QColor('blue'))
 
         self.tp2_horizontal_axis = QValueAxis()
         self.tp2_vertical_axis = QValueAxis()
 
+        self.tp2_area_series = QAreaSeries()
+        self.tp2_area_series.setUpperSeries(self.torque_plot_2_series)
+        self.tp2_area_series.setLowerSeries(QLineSeries(self))
+        for i in range(self.PLOT_VISIBLE_SAMPLES):
+            self.tp2_area_series.lowerSeries().append(0, 0)
+
+
+
         self.torque_plot_2 = QChart()
 
+        self.torque_plot_2.addSeries(self.tp2_area_series)
         self.torque_plot_2.addSeries(self.torque_plot_2_series)
         self.torque_plot_2.addAxis(self.tp2_vertical_axis, QtCore.Qt.AlignLeft)
         self.torque_plot_2.addAxis(self.tp2_horizontal_axis, QtCore.Qt.AlignBottom)
@@ -150,9 +159,12 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_2_series.attachAxis(self.tp2_horizontal_axis)
         self.torque_plot_2_series.attachAxis(self.tp2_vertical_axis)
 
+        self.tp2_area_series.attachAxis(self.tp2_horizontal_axis)
+        self.tp2_area_series.attachAxis(self.tp2_vertical_axis)
+
         self.tp2_vertical_axis.setRange(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
-        self.tp2_vertical_axis.setTickCount(1)
-        self.tp2_vertical_axis.setVisible(False)
+        self.tp2_vertical_axis.setTickCount(10)
+        self.tp2_vertical_axis.setVisible(True)
         self.tp2_horizontal_axis.setRange(-8, 0)
         self.tp2_horizontal_axis.setVisible(False)
         self.tp2_vertical_axis.setTickCount(10)
@@ -185,6 +197,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     def update_plot_2(self):
         self.torque_plot_2_series.append(self.xdata[-1], self.ydata[-1])
         self.torque_plot_2_series.remove(0)
+        self.tp2_area_series.lowerSeries().append(self.xdata[-1], 0)
+        self.tp2_area_series.lowerSeries().remove(0)
         self.tp2_horizontal_axis.setRange(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
 
     def start(self):
