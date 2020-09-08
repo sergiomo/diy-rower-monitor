@@ -1,0 +1,44 @@
+- Build out GUI.
+   - Make label indicators dropdowns to select units.
+      - Distance: total work (Joules or calories)
+      - Split: show split as percentage
+      - Boat speed: split / 200M
+      - App will remember units next time it starts.
+
+- Add GUI stylesheet.
+
+- Move RPi network config to a file (YAML?)
+
+- Add 2 missing charts:
+   - Average boat speed per stroke
+      - Calculated in boat_models.py, with storke data provided by WorkoutMetricsTracker
+   - Boat distance per stroke (maybe work or power per stroke makes more sense?)
+
+- Add status bar:
+   - Show "Connected" if data source initialization was successful.
+   - Show "Can't connect -- check network config." otherwise.
+   - V2: If can't connect, the status bar is clickable and brings up a network config dialog.
+
+- Fix frozen data when the flywheel stops:
+   - Enable a pigpio watchdog timer that resets on every encoder pulse. (I think that is the default behavior.)
+   - Set the watchdog expiration time according to a minimum assumed speed (e.g. 0.5 revs/s).
+      - Any speed measurements below the limit will be coerced to 0 m/s.
+   - Insert a 0 m/s point in the flywheel speed time series when the watchdog expires.
+   - Also insert the corresponding acceleration data point.
+   - Figure out how to make it work with the current speed data point interpolation method.
+   - Make sure this cannot possibly be interpreted as the start of a new stroke.
+
+- Interval editor
+   - Support for time, stroke count, and distance interval
+   - Add the ability to annotate each interval (e.g. "2:00 @ max power").
+   - Comments in workout file with "--" to separate blocks
+   - Show current interval and count down
+   - Show next interval
+   - Highlight current interval and auto-scroll if it's not visible
+   - Create examples
+   - Workouts are stored under "rowing_monitor/workouts"
+   - Select from predefined workouts with a dropdown menu
+   - In V1: workouts are read-only within the app. Use a text editor to create or modify.
+   - Future: create, delete, and modify workouts within the app.
+
+
