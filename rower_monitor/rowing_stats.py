@@ -153,11 +153,21 @@ class Stroke:
         self.end_idx = end_idx
         self.num_samples = end_idx - start_idx
 
-        self._segment_stroke()
+        (self.start_of_drive_idx,
+         self.end_of_drive_idx,
+         self.start_of_recovery_idx,
+         self.end_of_recovery_idx) = self._segment_stroke()
 
         self.fitted_damping_model = (
             self.workout.damping_model_estimator.fit_model_to_stroke_recovery_data(self)
         )
+        self.duration = self.workout.acceleration.timestamps[end_idx] - self.workout.acceleration.timestamps[start_idx]
+
+        drive_duration = self.workout.acceleration.timestamps[self.end_of_drive_idx] - \
+                         self.workout.acceleration.timestamps[self.start_of_drive_idx]
+        recovery_duration = self.duration - drive_duration
+        # Ratio is 2:1 when recovery is twice as long as drive
+        self.recovery_to_drive_ratio = recovery_duration / drive_duration
 
     def _segment_stroke(self):
         acceleration_samples = self.workout.acceleration[self.start_idx: self.end_idx].values
@@ -167,10 +177,12 @@ class Stroke:
         min_acceleration_value_idx = self.start_idx \
             + len(acceleration_samples) \
             - acceleration_samples[::-1].index(min_acceleration_value)
-        self.start_of_drive_idx = self.start_idx
-        self.end_of_drive_idx = min_acceleration_value_idx
-        self.start_of_recovery_idx = min_acceleration_value_idx + 1
-        self.end_of_recovery_idx = self.end_idx
+        start_of_drive_idx = self.start_idx
+        end_of_drive_idx = min_acceleration_value_idx
+        start_of_recovery_idx = min_acceleration_value_idx + 1
+        end_of_recovery_idx = self.end_idx
+
+        return (start_of_drive_idx, end_of_drive_idx, start_of_recovery_idx, end_of_recovery_idx)
 
     def estimate_damping_deceleration(self, speed_value):
         return self.fitted_damping_model.single_point(speed_value)
