@@ -58,7 +58,9 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_DPI = 300
     PLOT_FAST_DRAWING = False
 
-    GUI_FONT = QtGui.QFont('Roboto Mono', 10)
+    GUI_FONT = QtGui.QFont('Nunito', 10)
+    GUI_FONT_LARGE = QtGui.QFont('Nunito', 24)
+    GUI_FONT_SMALL = QtGui.QFont('Nunito', 8)
 
     def __init__(self, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
@@ -75,42 +77,86 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.main_widget.setFocus()
         self.setCentralWidget(self.main_widget)
         self.app_layout = QtWidgets.QVBoxLayout(self.main_widget)
-        self.app_layout.setContentsMargins(60, 60, 60, 60) #(left, top, right, bottom)
+        self.app_layout.setContentsMargins(0, 0, 0, 0) #(left, top, right, bottom)
 
         # Build button bar
         self.button_bar_layout = QtWidgets.QHBoxLayout()
         self.start_button = QtWidgets.QPushButton('Start')
-        self.stop_button = QtWidgets.QPushButton('Stop')
         #self.stop_button.setStyleSheet(
         #    'background-color: #E03A3E; border: none; color: #ffffff'
         #)
         # Appearance
         self.start_button.setFont(self.GUI_FONT)
-        self.stop_button.setFont(self.GUI_FONT)
+        self.start_button.setMinimumSize(97, 60)
+        self.start_button.setMaximumSize(97, 60)
         # Add to main window
         self.button_bar_layout.addWidget(self.start_button)
-        self.button_bar_layout.addWidget(self.stop_button)
-        self.button_bar_layout.setContentsMargins(0, 0, 0, 30)
+        self.button_bar_layout.setAlignment(QtCore.Qt.AlignLeft)
+        self.button_bar_layout.setContentsMargins(0, 0, 0, 0) #(left, top, right, bottom)
         self.app_layout.addLayout(self.button_bar_layout)
 
+        self.stats_layout = QtWidgets.QHBoxLayout()
+        self.app_layout.addLayout(self.stats_layout)
+
         # Build workout stats bar
-        self.stats_bar_layout = QtWidgets.QHBoxLayout()
-        self.workout_label = QtWidgets.QLabel('Workout')
+        self.metrics_panel_layout = QtWidgets.QVBoxLayout()
+        self.charts_panel_layout = QtWidgets.QVBoxLayout()
+        self.metrics_panel_layout.setContentsMargins(60, 10, 60, 60) #(left, top, right, bottom)
+        self.charts_panel_layout.setContentsMargins(0, 10, 60, 60) #(left, top, right, bottom)
+
+        self.workout_totals_layout = QtWidgets.QVBoxLayout()
         self.time_label = QtWidgets.QLabel('0:00')
-        self.distance_label = QtWidgets.QLabel('0 revs')
-        # Appearance
-        self.workout_label.setFont(self.GUI_FONT)
-        self.time_label.setFont(self.GUI_FONT)
-        self.distance_label.setFont(self.GUI_FONT)
-        self.workout_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.distance_label = QtWidgets.QLabel('0 m')
         self.time_label.setAlignment(QtCore.Qt.AlignCenter)
         self.distance_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.time_label.setFixedHeight(40)
+        self.distance_label.setFixedHeight(30)
+        self.workout_totals_layout.addWidget(self.time_label)
+        self.workout_totals_layout.addWidget(self.distance_label)
+        self.workout_totals_layout.setSpacing(0)
+        self.metrics_panel_layout.addLayout(self.workout_totals_layout)
+
+        self.stroke_stats_layout = QtWidgets.QVBoxLayout()
+        self.spm_label = QtWidgets.QLabel('0.00 spm')
+        self.stroke_ratio_label = QtWidgets.QLabel('1:1 ratio')
+        self.spm_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.stroke_ratio_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.spm_label.setFixedHeight(40)
+        self.stroke_ratio_label.setFixedHeight(30)
+        self.stroke_stats_layout.addWidget(self.spm_label)
+        self.stroke_stats_layout.addWidget(self.stroke_ratio_label)
+        self.stroke_stats_layout.setSpacing(0)
+        self.metrics_panel_layout.addLayout(self.stroke_stats_layout)
+
+        self.boat_stats_layout = QtWidgets.QVBoxLayout()
+        self.boat_speed_label = QtWidgets.QLabel('0.00 m/s')
+        self.split_time_label = QtWidgets.QLabel('0:00 /500m')
+        self.boat_speed_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.split_time_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.boat_speed_label.setFixedHeight(40)
+        self.split_time_label.setFixedHeight(30)
+        self.boat_stats_layout.addWidget(self.boat_speed_label)
+        self.boat_stats_layout.addWidget(self.split_time_label)
+        self.boat_stats_layout.setSpacing(0)
+        self.boat_stats_layout.setContentsMargins(0,0,0,0)
+        #self.boat_stats_layout.setSizeConstraint(QtWidgets.QLayout.SetFixedSize)
+        #self.boat_stats_layout.setSizeConstraint(QtWidgets.QLayout.SetMinAndMaxSize)
+        self.metrics_panel_layout.addLayout(self.boat_stats_layout)
+
+        # Appearance
+        self.time_label.setFont(self.GUI_FONT_LARGE)
+        self.distance_label.setFont(self.GUI_FONT)
+        self.spm_label.setFont(self.GUI_FONT_LARGE)
+        self.stroke_ratio_label.setFont(self.GUI_FONT)
+        self.boat_speed_label.setFont(self.GUI_FONT_LARGE)
+        self.split_time_label.setFont(self.GUI_FONT)
+
+
         # Add to main window
-        self.stats_bar_layout.addWidget(self.workout_label)
-        self.stats_bar_layout.addWidget(self.time_label)
-        self.stats_bar_layout.addWidget(self.distance_label)
-        self.stats_bar_layout.setContentsMargins(0, 0, 0, 30)
-        self.app_layout.addLayout(self.stats_bar_layout)
+        self.metrics_panel_layout.setSpacing(30)
+        self.metrics_panel_layout.setContentsMargins(30, 0, 30, 0) #(left, top, right, bottom)
+        self.stats_layout.addLayout(self.metrics_panel_layout)
+
 
         # Add chart
         self.torque_plot_box = QtWidgets.QGroupBox('Torque')
@@ -122,11 +168,14 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_box_layout = QtWidgets.QVBoxLayout()
         self.torque_plot_box_layout.addWidget(self.canvas)
         self.torque_plot_box.setLayout(self.torque_plot_box_layout)
-        self.app_layout.addWidget(self.torque_plot_box)
+        #self.charts_panel_layout.addWidget(self.torque_plot_box)
         # Initialize chart, and set things up for fast drawing.
         self.xdata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
         self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
         self.torque_plot, self.old_size = self.init_plot()
+
+
+        self.stats_layout.addLayout(self.charts_panel_layout)
 
 
 
@@ -177,12 +226,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         chartview.setRenderHint(QPainter.Antialiasing)
         chartview.setMinimumHeight(250)
         chartview.resize(250, 250)
-        self.app_layout.addWidget(chartview)
+        self.charts_panel_layout.addWidget(chartview)
         ############################################
 
         # Set interaction behavior
         self.start_button.clicked.connect(self.start)
-        self.stop_button.clicked.connect(self.stop)
 
         # Update workout duration every second
         self.timer = QtCore.QTimer()
@@ -202,16 +250,20 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.tp2_horizontal_axis.setRange(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
 
     def start(self):
-        if self.started:
-            return
-        self.started = True
+        if not self.started:
+            self.start_workout()
+            self.start_button.setText('Stop')
+            self.started = True
+        else:
+            self.stop_workout()
+            self.start_button.setText('Start')
+            self.started = False
+
+    def start_workout(self):
         self.timer.start()
         self.workout.start(qt_signal_emitter=self.workout_qt_emitter)
 
-    def stop(self):
-        if not self.started:
-            return
-        self.started = False
+    def stop_workout(self):
         self.timer.stop()
         self.workout.stop()
         if not self.DEV_MODE:
@@ -223,11 +275,17 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.start_timestamp = QtCore.QTime.currentTime()
         # Update distance
         distance = self.workout.num_flywheel_revolutions
-        self.distance_label.setText('%d revs' % distance)
+        self.distance_label.setText('%d m' % distance)
         if len(self.workout.torque) > 0:
             self.ydata = self.ydata[1:] + [self.workout.torque.values[-1]]
             self.xdata = self.xdata[1:] + [self.workout.torque.timestamps[-1]]
             self.update_plot()
+        # Update SPM
+        if len(self.workout.strokes) > 0:
+            spm = 60 / self.workout.strokes.values[-1].duration
+            ratio = self.workout.strokes.values[-1].recovery_to_drive_ratio
+            self.spm_label.setText('%.1f spm' % spm)
+            self.stroke_ratio_label.setText('%.1f:1 ratio' % ratio)
 
     def timer_tick(self):
         # Do nothing if we haven't received an encoder pulse yet.
