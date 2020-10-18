@@ -7,7 +7,16 @@ from threading import Lock
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import QPointF
 from PyQt5.QtGui import QPainter, QColor
-from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis, QAreaSeries
+from PyQt5.QtChart import (
+    QChart,
+    QChartView,
+    QLineSeries,
+    QValueAxis,
+    QAreaSeries,
+    QBarSeries,
+    QBarSet,
+    QBarCategoryAxis,
+)
 
 
 # Idea taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
@@ -32,6 +41,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_HEIGHT_INCHES = 1
     PLOT_DPI = 300
     PLOT_FAST_DRAWING = False
+
+    WORK_PLOT_VISIBLE_STROKES = 10
+    WORK_PLOT_MIN_Y = 0
+    WORK_PLOT_MAX_Y = 350
 
     GUI_FONT = QtGui.QFont('Nunito', 10)
     GUI_FONT_LARGE = QtGui.QFont('Nunito', 24)
@@ -136,6 +149,9 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.xdata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
         self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
 
+        self.work_per_stroke_data = [None for i in range(self.WORK_PLOT_VISIBLE_STROKES)]
+        self.seen_strokes = 0
+
         # Add torque chart
         ############################################
         # Axes
@@ -178,11 +194,48 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_vertical_axis.setTickCount(10)
 
         # Add plot view to GUI
-        chartview = QChartView(self.torque_plot)
-        chartview.setRenderHint(QPainter.Antialiasing)
-        chartview.setMinimumHeight(250)
-        chartview.resize(250, 250)
-        self.charts_panel_layout.addWidget(chartview)
+        self.torque_plot_chartview = QChartView(self.torque_plot)
+        self.torque_plot_chartview.setRenderHint(QPainter.Antialiasing)
+        self.torque_plot_chartview.setMinimumHeight(250)
+        self.torque_plot_chartview.resize(250, 250)
+        self.charts_panel_layout.addWidget(self.torque_plot_chartview)
+        ############################################
+
+        ############################################
+        # Add work chart
+        self.work_plot = QChart()
+        self.work_plot.legend().setVisible(False)
+        self.work_plot_horizontal_axis = QBarCategoryAxis()
+        self.work_plot_vertical_axis = QValueAxis()
+        self.work_plot.addAxis(self.work_plot_vertical_axis, QtCore.Qt.AlignLeft)
+        self.work_plot.addAxis(self.work_plot_horizontal_axis, QtCore.Qt.AlignBottom)
+
+        # Define series
+        self.work_plot_series = QBarSeries()
+        self.work_plot_series.setBarWidth(1.0)
+        self.work_plot_bar_set = QBarSet("Work per stroke")
+        self.work_plot_series.append(self.work_plot_bar_set)
+        for i in range(self.WORK_PLOT_VISIBLE_STROKES):
+            self.work_plot_bar_set.append(0)
+
+        # Compose plot
+        self.work_plot.addSeries(self.work_plot_series)
+        self.work_plot_series.attachAxis(self.work_plot_horizontal_axis)
+        self.work_plot_series.attachAxis(self.work_plot_vertical_axis)
+
+        # Set axes range
+        self.work_plot_vertical_axis.setRange(self.WORK_PLOT_MIN_Y, self.WORK_PLOT_MAX_Y)
+        self.work_plot_vertical_axis.setTickCount(5)
+        self.work_plot_vertical_axis.setVisible(True)
+        self.work_plot_horizontal_axis.append([str(x+1) for x in range(self.WORK_PLOT_VISIBLE_STROKES)])
+        self.work_plot_horizontal_axis.setVisible(True)
+
+        # Add plot view to GUI
+        self.work_plot_chartview = QChartView(self.work_plot)
+        self.work_plot_chartview.setRenderHint(QPainter.Antialiasing)
+        self.work_plot_chartview.setMinimumHeight(250)
+        self.work_plot_chartview.resize(250, 250)
+        self.charts_panel_layout.addWidget(self.work_plot_chartview)
         ############################################
 
         # Set interaction behavior
@@ -198,12 +251,16 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         self.show()
 
-    def update_plot(self):
+    def update_torque_plot(self):
         self.torque_plot_series.append(self.xdata[-1], self.ydata[-1])
         self.torque_plot_series.remove(0)
         self.torque_plot_area_series.lowerSeries().append(self.xdata[-1], 0)
         self.torque_plot_area_series.lowerSeries().remove(0)
         self.torque_plot_horizontal_axis.setRange(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
+
+    def update_work_plot(self):
+        self.work_plot_bar_set.append(self.work_per_stroke_data[-1])
+        self.work_plot_bar_set.remove(0)
 
     def start(self):
         if not self.started:
@@ -235,13 +292,19 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         if len(self.workout.torque) > 0:
             self.ydata = self.ydata[1:] + [self.workout.torque.values[-1]]
             self.xdata = self.xdata[1:] + [self.workout.torque.timestamps[-1]]
-            self.update_plot()
+            self.update_torque_plot()
         # Update SPM
-        if len(self.workout.strokes) > 0:
+        new_stroke_info_available = len(self.workout.strokes) > self.seen_strokes
+        if new_stroke_info_available:
+            # SPM indicator
             spm = 60 / self.workout.strokes.values[-1].duration
             ratio = self.workout.strokes.values[-1].recovery_to_drive_ratio
             self.spm_label.setText('%.1f spm' % spm)
             self.stroke_ratio_label.setText('%.1f:1 ratio' % ratio)
+            # Work plot
+            self.work_per_stroke_data = self.work_per_stroke_data[1:] + [self.workout.strokes.values[-1].work_done_by_person]
+            self.update_work_plot()
+            self.seen_strokes += 1
 
     def timer_tick(self):
         # Do nothing if we haven't received an encoder pulse yet.
