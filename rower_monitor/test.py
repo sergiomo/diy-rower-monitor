@@ -19,7 +19,15 @@ workout.start()
 workout.stop()
 
 workout.save('')
+
+
 print(workout.num_flywheel_revolutions)
+
+work = [x.work_done_by_person / 5.0 for x in workout.strokes.values]
+plt.plot(workout.torque.timestamps, workout.torque.values)
+plt.scatter(workout.strokes.timestamps, work, s=1, c='red')
+plt.show()
+
 
 print('done')
 exit()

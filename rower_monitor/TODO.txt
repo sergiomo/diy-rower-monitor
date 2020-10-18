@@ -1,3 +1,8 @@
+- Analysis
+  - Implement fancy polynomial interpolation in TimeSeries.interpolate_midpoints
+  - In StrokeMetricsTracker._process_new_stroke, implement more sophisticated stroke-to-stroke segmentation.
+  - In FlywheelMetricsTracker.get_*_data_point_estimate, review the assumption that speed is linear, and torque and acceleration are constant.
+
 - Build out GUI.
    - Make label indicators dropdowns to select units.
       - Distance: total work (Joules or calories)

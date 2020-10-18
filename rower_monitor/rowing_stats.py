@@ -101,7 +101,7 @@ class StrokeMetricsTracker:
             flywheel_deceleration_due_to_damping = 0.0
         person_acc = max(0.0, self.workout.acceleration.values[-1] - flywheel_deceleration_due_to_damping)
         self.workout.torque.append(
-            value=person_acc,
+            value=person_acc * self.FLYWHEEL_MOMENT_OF_INERTIA,
             timestamp=self.workout.acceleration.timestamps[-1]
         )
 
@@ -124,6 +124,9 @@ class StrokeMetricsTracker:
     def _process_new_stroke(self):
         # For now assume _new_stroke_indicator gives us a perfect segmentation between strokes, and
         # triggers exactly on the first sample of a new stroke.
+        # TODO: more sophisticated segmentation by finding the last "credible data point" belonging to a stroke,
+        #  identified by looking at the model fit residuals. For each point calculate the p value and set a cut-off
+        #  threshold.
         start_of_this_stroke_idx = self._start_of_ongoing_stroke_idx
         end_of_this_stroke_idx = len(self.workout.acceleration) - 2
 
@@ -168,6 +171,7 @@ class Stroke:
         recovery_duration = self.duration - drive_duration
         # Ratio is 2:1 when recovery is twice as long as drive
         self.recovery_to_drive_ratio = recovery_duration / drive_duration
+        self.work_done_by_person = self._calculate_work_done_by_person()
 
     def _segment_stroke(self):
         acceleration_samples = self.workout.acceleration[self.start_idx: self.end_idx].values
@@ -186,6 +190,30 @@ class Stroke:
 
     def estimate_damping_deceleration(self, speed_value):
         return self.fitted_damping_model.single_point(speed_value)
+
+    def _calculate_work_done_by_person(self):
+        """Calculates the work done by the person who's rowing.
+                           Work_person = torque_person * angular distance
+        We calculate the total work done during this stroke via numeric integration of
+                          delta_work = instantaneous_torque * delta_theta
+        (Below we assume the flywheel speed is constant between ticks)"""
+        torque_samples_ts = self.workout.torque[self.start_idx: self.end_idx + 1]
+        # Speed has 1 extra sample at the beginning, and we include 1 extra sample at the end so we can interpolate
+        # to match the acceleration time series timestamps. We also include an additional look-ahead sample at the end
+        # to calculate the rotational distance traveled in the last time differential.
+        speed_samples_ts = self.workout.speed[self.start_idx: self.end_idx + 3]
+        # These are interpolated samples to align them time-wise with the torque time series.
+        interpolated_speed_samples_ts = speed_samples_ts.interpolate_midpoints()
+        # Numeric integration
+        result = 0.0
+        for idx, (torque_value, timestamp) in enumerate(torque_samples_ts):
+            instantaneous_speed = (interpolated_speed_samples_ts.values[idx] + interpolated_speed_samples_ts.values[idx + 1]) / 2.0
+            # This is why we need an extra look-ahead sample at the tail end of the speed time series.
+            next_timestamp = interpolated_speed_samples_ts.timestamps[idx + 1]
+            time_between_samples = next_timestamp - timestamp
+            delta_distance = instantaneous_speed * time_between_samples
+            result += delta_distance * torque_value
+        return result
 
 
 class LinearDampingFactorEstimator:
@@ -206,20 +234,13 @@ class LinearDampingFactorEstimator:
         acceleration_samples_ts = self.workout.acceleration[
             stroke.start_of_recovery_idx: stroke.end_of_recovery_idx + 1
         ]
-        # Speed has 1 extra sample at the beginning, and we include 1 extra sample at the start so we can interpolate
+        # Speed has 1 extra sample at the beginning, and we include 1 extra sample at the end so we can interpolate
         # to match the acceleration time series timestamps.
         speed_samples_ts = self.workout.speed[
             stroke.start_of_recovery_idx: stroke.end_of_recovery_idx + 2
         ]
         # These are interpolated samples to align them time-wise with the acceleration time series.
-        interpolated_speed_samples_ts = TimeSeries()
-        for idx, (value, timestamp) in enumerate(speed_samples_ts):
-            if idx == len(speed_samples_ts) - 1:
-                break
-            next_value_in_ts, next_timestamp_in_ts = speed_samples_ts[idx + 1]
-            interpolated_speed_samples_ts.append(
-                value=(value + next_value_in_ts) / 2.0,
-                timestamp=(timestamp + next_timestamp_in_ts) / 2.0)
+        interpolated_speed_samples_ts = speed_samples_ts.interpolate_midpoints()
         included_acceleration_samples_ts = self.get_window(acceleration_samples_ts)
         # This is a very slow-speed stroke and there aren't enough samples to fit the damping model.
         if included_acceleration_samples_ts is None:

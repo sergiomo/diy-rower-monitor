@@ -53,14 +53,6 @@ class WorkoutMetricsTracker:
         self.num_flywheel_revolutions += 1.0 / self.flywheel_metrics_tracker.NUM_ENCODER_PULSES_PER_REVOLUTION
         self.flywheel_sensor_pulse_timestamps.append(sensor_pulse_time)
         self.flywheel_metrics_tracker.update()
-        # self._update_tick_stats()
-        # Updates torque time series, check for the new stroke heuristic and updates the stroke time
-        # series if needed.
-        # self._update_torque_time_series()
-        # if self._new_stroke_indicator():
-        #     self._process_new_stroke()
-        #     self._update_stroke_stats()
-
         self.stroke_metrics_tracker.update()
 
         if self._qt_signal_emitter is not None:

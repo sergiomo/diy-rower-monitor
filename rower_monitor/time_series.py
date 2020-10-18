@@ -23,6 +23,21 @@ class TimeSeries:
             last_included_item_idx = len(included_mask) - included_mask[::-1].index(True)
             return self[first_included_item_idx: last_included_item_idx]
 
+    def interpolate_midpoints(self):
+        """Returns interpolated samples at the midpoints of the existing data points. We use this to align the
+        timestamps of acceleration and speed time series."""
+        # TODO: Fancy polynomial interpolation
+        result = TimeSeries()
+        for idx, (value, timestamp) in enumerate(self):
+            if idx == len(self) - 1:
+                break
+            next_value_in_ts, next_timestamp_in_ts = self[idx + 1]
+            result.append(
+                value=(value + next_value_in_ts) / 2.0,
+                timestamp=(timestamp + next_timestamp_in_ts) / 2.0
+            )
+        return result
+
     def __getitem__(self, idx):
         if type(idx) is int:
             return self.values[idx], self.timestamps[idx]
