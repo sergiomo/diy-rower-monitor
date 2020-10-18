@@ -146,10 +146,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.stats_layout.addLayout(self.metrics_panel_layout)
         self.stats_layout.addLayout(self.charts_panel_layout)
 
-        self.xdata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
-        self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
+        self.xdata = [0.0 for i in range(self.PLOT_VISIBLE_SAMPLES)]
+        self.ydata = [0.0 for i in range(self.PLOT_VISIBLE_SAMPLES)]
 
-        self.work_per_stroke_data = [None for i in range(self.WORK_PLOT_VISIBLE_STROKES)]
+        self.work_per_stroke_data = [0.0 for i in range(self.WORK_PLOT_VISIBLE_STROKES)]
         self.seen_strokes = 0
 
         # Add torque chart
@@ -187,8 +187,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         # Set axes range
         self.torque_plot_vertical_axis.setRange(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
-        self.torque_plot_vertical_axis.setTickCount(10)
-        self.torque_plot_vertical_axis.setVisible(True)
+        self.torque_plot_vertical_axis.setTickCount(2)
+        self.torque_plot_vertical_axis.setVisible(False)
         self.torque_plot_horizontal_axis.setRange(-8, 0)
         self.torque_plot_horizontal_axis.setVisible(False)
         self.torque_plot_vertical_axis.setTickCount(10)
@@ -212,11 +212,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         # Define series
         self.work_plot_series = QBarSeries()
+        self.work_plot_bar_set_list = [QBarSet(str(i)) for i in range(self.WORK_PLOT_VISIBLE_STROKES)]
+        self.work_plot_series.append(self.work_plot_bar_set_list)
+        for bar_set in self.work_plot_bar_set_list:
+            bar_set.append(0)
         self.work_plot_series.setBarWidth(1.0)
-        self.work_plot_bar_set = QBarSet("Work per stroke")
-        self.work_plot_series.append(self.work_plot_bar_set)
-        for i in range(self.WORK_PLOT_VISIBLE_STROKES):
-            self.work_plot_bar_set.append(0)
 
         # Compose plot
         self.work_plot.addSeries(self.work_plot_series)
@@ -225,10 +225,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         # Set axes range
         self.work_plot_vertical_axis.setRange(self.WORK_PLOT_MIN_Y, self.WORK_PLOT_MAX_Y)
-        self.work_plot_vertical_axis.setTickCount(5)
+        self.work_plot_vertical_axis.setTickCount(8)
         self.work_plot_vertical_axis.setVisible(True)
-        self.work_plot_horizontal_axis.append([str(x+1) for x in range(self.WORK_PLOT_VISIBLE_STROKES)])
-        self.work_plot_horizontal_axis.setVisible(True)
+        self.work_plot_horizontal_axis.append("1")
+        self.work_plot_horizontal_axis.setVisible(False)
 
         # Add plot view to GUI
         self.work_plot_chartview = QChartView(self.work_plot)
@@ -259,8 +259,15 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_horizontal_axis.setRange(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
 
     def update_work_plot(self):
-        self.work_plot_bar_set.append(self.work_per_stroke_data[-1])
-        self.work_plot_bar_set.remove(0)
+        # Create new bar set
+        new_bar_set = QBarSet(str(self.seen_strokes))
+        value = self.work_per_stroke_data[-1]
+        value_rel = int(value * 255 / self.WORK_PLOT_MAX_Y)
+        new_bar_set.append(value)
+        new_bar_set.setColor(QColor(value_rel, value_rel, value_rel))
+        # Append new set, and remove oldest
+        self.work_plot_series.append(new_bar_set)
+        self.work_plot_series.remove(self.work_plot_series.barSets()[0])
 
     def start(self):
         if not self.started:
