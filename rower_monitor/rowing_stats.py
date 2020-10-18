@@ -172,6 +172,7 @@ class Stroke:
         # Ratio is 2:1 when recovery is twice as long as drive
         self.recovery_to_drive_ratio = recovery_duration / drive_duration
         self.work_done_by_person = self._calculate_work_done_by_person()
+        self.average_power = self.work_done_by_person / self.duration
 
     def _segment_stroke(self):
         acceleration_samples = self.workout.acceleration[self.start_idx: self.end_idx].values

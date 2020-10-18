@@ -60,9 +60,11 @@ class WorkoutMetricsTracker:
         elif self._ui_callback is not None:
             self._ui_callback(self)
 
-    def save(self, output_folder_path):
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %Hh%Mm%Ss")
-        output_file_name = timestamp + ".csv"
+    # TODO: change this to take in output_file_path -- decide file names within app.py
+    def save(self, output_folder_path, output_file_name=None):
+        if output_file_name is None:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %Hh%Mm%Ss")
+            output_file_name = timestamp + ".csv"
         output_file_path = os.path.join(output_folder_path, output_file_name)
         with open(output_file_path, "w", newline="") as output_file:
             csv_writer = csv.writer(output_file)

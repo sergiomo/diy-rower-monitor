@@ -46,4 +46,7 @@
    - In V1: workouts are read-only within the app. Use a text editor to create or modify.
    - Future: create, delete, and modify workouts within the app.
 
+- Ghost boat
+   - Input to set ghost's warm up time
+   - Input to this workout's warm up time (show as "Race starts in 2:00" countdown)
 
