@@ -1,5 +1,4 @@
 import sys
-import matplotlib
 
 import data_sources as ds
 import workout as wo
@@ -10,11 +9,6 @@ from PyQt5.QtCore import QPointF
 from PyQt5.QtGui import QPainter, QColor
 from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis, QAreaSeries
 
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-
-matplotlib.use('Qt5Agg')
-
 
 # Idea taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
 class SignalEmitter(QtCore.QObject):
@@ -22,25 +16,6 @@ class SignalEmitter(QtCore.QObject):
 
     def __init__(self):
         super(SignalEmitter, self).__init__()
-
-
-class MplCanvas(FigureCanvas):
-    PLOT_MIN_Y = -10
-    PLOT_MAX_Y = 55
-
-    def __init__(self, width, height, dpi):
-        fig = Figure(
-            figsize=(width, height),
-            dpi=dpi,
-            facecolor='#2c2c2c',
-            frameon=True,
-            tight_layout=False,
-        )
-        self.axes = fig.add_axes([0,0,1,1], frameon=False)
-        self.axes.get_xaxis().set_visible(False)
-        self.axes.get_yaxis().set_visible(False)
-        self.axes.set_ylim(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
-        super(MplCanvas, self).__init__(fig)
 
 
 class RowingMonitorMainWindow(QtWidgets.QMainWindow):
@@ -60,7 +35,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
     GUI_FONT = QtGui.QFont('Nunito', 10)
     GUI_FONT_LARGE = QtGui.QFont('Nunito', 24)
-    GUI_FONT_SMALL = QtGui.QFont('Nunito', 8)
+    GUI_FONT_MEDIUM = QtGui.QFont('Nunito', 16)
 
     def __init__(self, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
@@ -138,91 +113,72 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.boat_stats_layout.addWidget(self.boat_speed_label)
         self.boat_stats_layout.addWidget(self.split_time_label)
         self.boat_stats_layout.setSpacing(0)
-        self.boat_stats_layout.setContentsMargins(0,0,0,0)
+        self.boat_stats_layout.setContentsMargins(0, 0, 0, 0)
         #self.boat_stats_layout.setSizeConstraint(QtWidgets.QLayout.SetFixedSize)
         #self.boat_stats_layout.setSizeConstraint(QtWidgets.QLayout.SetMinAndMaxSize)
         self.metrics_panel_layout.addLayout(self.boat_stats_layout)
 
         # Appearance
         self.time_label.setFont(self.GUI_FONT_LARGE)
-        self.distance_label.setFont(self.GUI_FONT)
+        self.distance_label.setFont(self.GUI_FONT_MEDIUM)
         self.spm_label.setFont(self.GUI_FONT_LARGE)
-        self.stroke_ratio_label.setFont(self.GUI_FONT)
+        self.stroke_ratio_label.setFont(self.GUI_FONT_MEDIUM)
         self.boat_speed_label.setFont(self.GUI_FONT_LARGE)
-        self.split_time_label.setFont(self.GUI_FONT)
+        self.split_time_label.setFont(self.GUI_FONT_MEDIUM)
 
 
         # Add to main window
         self.metrics_panel_layout.setSpacing(30)
         self.metrics_panel_layout.setContentsMargins(30, 0, 30, 0) #(left, top, right, bottom)
         self.stats_layout.addLayout(self.metrics_panel_layout)
-
-
-        # Add chart
-        self.torque_plot_box = QtWidgets.QGroupBox('Torque')
-        self.torque_plot_box.setAlignment(QtCore.Qt.AlignHCenter)
-        self.torque_plot_box.setFont(self.GUI_FONT)
-        self.canvas = MplCanvas(width=self.PLOT_WIDTH_INCHES,
-                                height=self.PLOT_HEIGHT_INCHES,
-                                dpi=self.PLOT_DPI)
-        self.torque_plot_box_layout = QtWidgets.QVBoxLayout()
-        self.torque_plot_box_layout.addWidget(self.canvas)
-        self.torque_plot_box.setLayout(self.torque_plot_box_layout)
-        #self.charts_panel_layout.addWidget(self.torque_plot_box)
-        # Initialize chart, and set things up for fast drawing.
-        self.xdata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
-        self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
-        self.torque_plot, self.old_size = self.init_plot()
-
-
         self.stats_layout.addLayout(self.charts_panel_layout)
 
+        self.xdata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
+        self.ydata = [None for i in range(self.PLOT_VISIBLE_SAMPLES)]
 
-
-
+        # Add torque chart
         ############################################
-        self.torque_plot_2_series = QLineSeries(self)
+        # Axes
+        self.torque_plot = QChart()
+        #self.torque_plot.setAnimationOptions(QChart.GridAxisAnimations)
+        self.torque_plot.legend().setVisible(False)
+        self.torque_plot_horizontal_axis = QValueAxis()
+        self.torque_plot_vertical_axis = QValueAxis()
+        self.torque_plot.addAxis(self.torque_plot_vertical_axis, QtCore.Qt.AlignLeft)
+        self.torque_plot.addAxis(self.torque_plot_horizontal_axis, QtCore.Qt.AlignBottom)
+
+        # Line series
+        self.torque_plot_series = QLineSeries(self)
         for i in range(self.PLOT_VISIBLE_SAMPLES):
-            self.torque_plot_2_series.append(0, 0)
+            self.torque_plot_series.append(0, 0)
+        self.torque_plot_series.setColor(QColor('red'))
 
-        #self.torque_plot_2_series.setColor(QColor('blue'))
-
-        self.tp2_horizontal_axis = QValueAxis()
-        self.tp2_vertical_axis = QValueAxis()
-
-        self.tp2_area_series = QAreaSeries()
-        self.tp2_area_series.setUpperSeries(self.torque_plot_2_series)
-        self.tp2_area_series.setLowerSeries(QLineSeries(self))
+        # Area series
+        self.torque_plot_area_series = QAreaSeries()
+        self.torque_plot_area_series.setUpperSeries(self.torque_plot_series)
+        self.torque_plot_area_series.setLowerSeries(QLineSeries(self))
         for i in range(self.PLOT_VISIBLE_SAMPLES):
-            self.tp2_area_series.lowerSeries().append(0, 0)
+            self.torque_plot_area_series.lowerSeries().append(0, 0)
+        self.torque_plot_area_series.setColor(QColor('blue'))
 
+        # Compose plot
+        self.torque_plot.addSeries(self.torque_plot_area_series)
+        self.torque_plot_area_series.attachAxis(self.torque_plot_horizontal_axis)
+        self.torque_plot_area_series.attachAxis(self.torque_plot_vertical_axis)
+        self.torque_plot.addSeries(self.torque_plot_series)
+        self.torque_plot_series.attachAxis(self.torque_plot_horizontal_axis)
+        self.torque_plot_series.attachAxis(self.torque_plot_vertical_axis)
 
+        # Set axes range
+        self.torque_plot_vertical_axis.setRange(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
+        self.torque_plot_vertical_axis.setTickCount(10)
+        self.torque_plot_vertical_axis.setVisible(True)
+        self.torque_plot_horizontal_axis.setRange(-8, 0)
+        self.torque_plot_horizontal_axis.setVisible(False)
+        self.torque_plot_vertical_axis.setTickCount(10)
 
-        self.torque_plot_2 = QChart()
-
-        self.torque_plot_2.addSeries(self.tp2_area_series)
-        self.torque_plot_2.addSeries(self.torque_plot_2_series)
-        self.torque_plot_2.addAxis(self.tp2_vertical_axis, QtCore.Qt.AlignLeft)
-        self.torque_plot_2.addAxis(self.tp2_horizontal_axis, QtCore.Qt.AlignBottom)
-
-        self.torque_plot_2_series.attachAxis(self.tp2_horizontal_axis)
-        self.torque_plot_2_series.attachAxis(self.tp2_vertical_axis)
-
-        self.tp2_area_series.attachAxis(self.tp2_horizontal_axis)
-        self.tp2_area_series.attachAxis(self.tp2_vertical_axis)
-
-        self.tp2_vertical_axis.setRange(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
-        self.tp2_vertical_axis.setTickCount(10)
-        self.tp2_vertical_axis.setVisible(True)
-        self.tp2_horizontal_axis.setRange(-8, 0)
-        self.tp2_horizontal_axis.setVisible(False)
-        self.tp2_vertical_axis.setTickCount(10)
-
-
-
-        #self.torque_plot_2.setAnimationOptions(QChart.GridAxisAnimations)
-        self.torque_plot_2.legend().setVisible(False)
-        chartview = QChartView(self.torque_plot_2)
+        # Add plot view to GUI
+        chartview = QChartView(self.torque_plot)
         chartview.setRenderHint(QPainter.Antialiasing)
         chartview.setMinimumHeight(250)
         chartview.resize(250, 250)
@@ -242,12 +198,12 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         self.show()
 
-    def update_plot_2(self):
-        self.torque_plot_2_series.append(self.xdata[-1], self.ydata[-1])
-        self.torque_plot_2_series.remove(0)
-        self.tp2_area_series.lowerSeries().append(self.xdata[-1], 0)
-        self.tp2_area_series.lowerSeries().remove(0)
-        self.tp2_horizontal_axis.setRange(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
+    def update_plot(self):
+        self.torque_plot_series.append(self.xdata[-1], self.ydata[-1])
+        self.torque_plot_series.remove(0)
+        self.torque_plot_area_series.lowerSeries().append(self.xdata[-1], 0)
+        self.torque_plot_area_series.lowerSeries().remove(0)
+        self.torque_plot_horizontal_axis.setRange(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
 
     def start(self):
         if not self.started:
@@ -298,57 +254,6 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         time_string = '%d:%02d' % (minutes, seconds)
         self.time_label.setText(time_string)
 
-    def draw_and_cache_plot_background(self, force_draw):
-        #self.canvas.axes.clear()
-        self.canvas.axes.set_ylim(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
-        #self.canvas.axes.grid()
-        self.canvas.axes.set_axis_off()
-        #self.canvas.axes.get_xaxis().set_visible(False)
-        #self.canvas.axes.get_yaxis().set_visible(False)
-
-        if force_draw:
-            self.canvas.draw()
-        else:
-            self.canvas.draw_idle()
-        self.canvas.background = self.canvas.copy_from_bbox(self.canvas.axes.bbox)
-
-    def init_plot(self):
-        with self.redraw_lock:
-            # Draw a blank plot and cache the background.
-            self.draw_and_cache_plot_background(force_draw=True)
-            # Return a reference to the plot and its current size. The size is used to force a full redraw if the window
-            # in resized.
-            plot_refs = self.canvas.axes.plot(self.xdata, self.ydata, linewidth=1.0, color='#4cadda') #color='#E9E9E9')
-            plot_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
-            return plot_refs[0], plot_size
-
-    def update_plot(self):
-        self.update_plot_2()
-        # Update data and adjust visible window along the X axis.
-        with self.redraw_lock:
-            if not self.PLOT_FAST_DRAWING:
-                self.torque_plot.set_ydata(self.ydata)
-                self.torque_plot.set_xdata(self.xdata)
-                self.canvas.axes.set_xlim(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
-                self.canvas.draw_idle()
-            else:
-                # Force a full redraw if the window has been resized.
-                current_size = (self.canvas.axes.bbox.width, self.canvas.axes.bbox.height)
-                if current_size != self.old_size:
-                    self.torque_plot.set_xdata([None])
-                    self.torque_plot.set_ydata([None])
-                    self.draw_and_cache_plot_background(force_draw=True)
-                    self.old_size = current_size
-
-                self.torque_plot.set_ydata(self.ydata)
-                self.torque_plot.set_xdata(self.xdata)
-                self.canvas.axes.set_xlim(self.xdata[-1] - self.PLOT_TIME_WINDOW_SECONDS, self.xdata[-1])
-
-                # Fast drawing. Restore the cached background, and draw the plot line.
-                self.canvas.restore_region(self.canvas.background)
-                self.canvas.axes.draw_artist(self.torque_plot)
-                self.canvas.blit(self.canvas.axes.bbox)
-
 
 data_source = ds.CsvFile(
     "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",
@@ -356,10 +261,9 @@ data_source = ds.CsvFile(
     threaded=True
 )
 
-#data_source = ds.PiGpioClient(ip_address='192.168.1.130', pigpio_port=9876, gpio_pin_number=17)
-#print('Connected!')
-#sys.argv += ['--style', 'windowsvista']
+#data_source = ds.PiGpioClient(ip_address='192.168.1.218', pigpio_port=9876, gpio_pin_number=17)
+print('Connected!')
 app = QtWidgets.QApplication(sys.argv)
 w = RowingMonitorMainWindow(data_source)
-#w.resize(600, 800)
+w.resize(900, 600)
 app.exec_()

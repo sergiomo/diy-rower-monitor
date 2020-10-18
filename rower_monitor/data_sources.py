@@ -20,7 +20,7 @@ class PiGpioClient(DataSource):
     # Constant taken from https://github.com/joan2937/pigpio/blob/v76/pigpio.py#L961
     RPI_TIMER_MAX_VALUE = 1 << 32
     RPI_TICK_PERIOD_IN_SECONDS = 1e-6
-    RPI_IP_ADDRESS = "192.168.1.242"
+    RPI_IP_ADDRESS = "192.168.1.218"
     RPI_PIGPIO_PORT = 9876
     RPI_PIN_NUMBER = 17
 
