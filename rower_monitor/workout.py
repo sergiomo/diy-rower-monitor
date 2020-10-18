@@ -6,16 +6,6 @@ from time_series import TimeSeries
 import data_sources as ds
 import rowing_stats
 
-# MY_HARDWARE_SETUP = {
-#     rpi ip = 192.168.1.242
-#     rpi pigpiod port = 9876
-#     rpi pin num = 17
-#     rower type = magnetic
-#     flywheel sensor pulses per rev = 4
-#     flywheel sensor pulses are evenly spaced = false
-# }
-
-
 class WorkoutMetricsTracker:
     def __init__(
             self,
