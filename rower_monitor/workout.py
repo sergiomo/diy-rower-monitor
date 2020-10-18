@@ -73,37 +73,3 @@ class WorkoutMetricsTracker:
             )
             csv_writer.writerows([[x] for x in self.raw_ticks])
         return
-
-
-
-"""
-    def _update_tick_stats(self):
-        # Refresh stats that are updated for each rising edge event
-        # total workout duration
-        # instantaneous watts (averaged over some time period)
-        # watt chart
-
-        # Force curve
-        # Total work done (boat distance)
-        return
-
-    def _update_stroke_stats(self):
-        # Refresh stat that are updated for each stroke
-        # Stroke rate
-        return
-"""
-
-"""
-    def save_workout(self, output_folder_path=""):
-        # TODO: save raw ticks, clean ticks, speed, and acceleration
-        timestamp = self.workout_start.strftime("%Y-%m-%d %Hh%Mm%Ss")
-        output_file_name = timestamp + ".csv"
-        output_file_path = os.path.append(output_folder_path, output_file_name)
-        with open(output_file_path, "w", newline="") as output_file:
-            csv_writer = csv.writer(output_file)
-            csv_writer.writerow(
-                [self.CSV_OUTPUT_TICKS_COLUMN_NAME, self.CSV_OUTPUT_SPEED_COLUMN_NAME, ]
-            )
-            for idx in range(len(self.speed)):
-                csv_writer.writerow([self.speed[idx][1], self.speed[idx][0]])
-"""
