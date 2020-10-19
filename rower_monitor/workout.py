@@ -2,31 +2,27 @@ import csv
 import os
 import datetime
 
-from time_series import TimeSeries
+#from time_series import TimeSeries
+import boat_metrics
 import data_sources as ds
-import rowing_stats
+import machine_metrics
+import person_metrics
+
 
 class WorkoutMetricsTracker:
     def __init__(
             self,
             data_source,
-            flywheel_metrics_tracker_class=rowing_stats.FlywheelMetricsTracker,
-            stroke_metrics_tracker_class=rowing_stats.StrokeMetricsTracker,
-            damping_model_estimator_class=rowing_stats.LinearDampingFactorEstimator,
+            machine_metrics_tracker_class=machine_metrics.MyMagneticRowerMetricsTracker,
+            person_metrics_tracker_class=person_metrics.PersonMetricsTracker,
+            boat_model_class=boat_metrics.RotatingWheel,
     ):
         self.data_source = data_source
-        self.flywheel_metrics_tracker = flywheel_metrics_tracker_class(self)
-        self.stroke_metrics_tracker = stroke_metrics_tracker_class(self)
-        self.damping_model_estimator = damping_model_estimator_class(self)
 
-        # We store the raw ticks for debugging and to facilitate future development.
-        self.raw_ticks = []
-        self.flywheel_sensor_pulse_timestamps = []
-        self.num_flywheel_revolutions = 0
-        self.speed = TimeSeries()
-        self.acceleration = TimeSeries()
-        self.torque = TimeSeries()
-        self.strokes = TimeSeries()
+        self.machine = machine_metrics_tracker_class(self)
+        self.person = person_metrics_tracker_class(self)
+        self.boat = boat_model_class(self)
+
         self._ui_callback = None
         self._qt_signal_emitter = None
 
@@ -39,11 +35,12 @@ class WorkoutMetricsTracker:
         self.data_source.stop()
 
     def flywheel_sensor_pulse_handler(self, sensor_pulse_time, raw_tick_value):
-        self.raw_ticks.append(raw_tick_value)
-        self.num_flywheel_revolutions += 1.0 / self.flywheel_metrics_tracker.NUM_ENCODER_PULSES_PER_REVOLUTION
-        self.flywheel_sensor_pulse_timestamps.append(sensor_pulse_time)
-        self.flywheel_metrics_tracker.update()
-        self.stroke_metrics_tracker.update()
+        self.machine.update(
+            sensor_pulse_time=sensor_pulse_time,
+            raw_tick_value=raw_tick_value
+        )
+        self.person.update()
+        self.boat.update()
 
         if self._qt_signal_emitter is not None:
             self._qt_signal_emitter.updated.emit()
