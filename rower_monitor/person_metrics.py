@@ -11,6 +11,10 @@ class Stroke:
         self.end_idx = end_idx
         self.num_samples = end_idx - start_idx
 
+
+        self.start_time = self.workout.machine.flywheel_acceleration.timestamps[start_idx]
+        self.end_time = self.workout.machine.flywheel_acceleration.timestamps[end_idx]
+
         (self.start_of_drive_idx,
          self.end_of_drive_idx,
          self.start_of_recovery_idx,
@@ -19,8 +23,7 @@ class Stroke:
         # self.fitted_damping_model = (
         #     self.workout.damping_model_estimator.fit_model_to_stroke_recovery_data(self)
         # )
-        self.duration = self.workout.machine.flywheel_acceleration.timestamps[end_idx] - \
-                        self.workout.machine.flywheel_acceleration.timestamps[start_idx]
+        self.duration = self.end_time - self.start_time
         drive_duration = self.workout.machine.flywheel_acceleration.timestamps[self.end_of_drive_idx] - \
                          self.workout.machine.flywheel_acceleration.timestamps[self.start_of_drive_idx]
         recovery_duration = self.duration - drive_duration

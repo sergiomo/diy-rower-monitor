@@ -34,7 +34,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     LOG_FOLDER_PATH = 'C:\\Users\\checo\\Dropbox\\rower\\logs'
 
     PLOT_VISIBLE_SAMPLES = 200
-    PLOT_MIN_Y = -10
+    PLOT_MIN_Y = -1
     PLOT_MAX_Y = 55
     PLOT_TIME_WINDOW_SECONDS = 7
     PLOT_WIDTH_INCHES = 2
@@ -42,13 +42,17 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_DPI = 300
     PLOT_FAST_DRAWING = False
 
-    WORK_PLOT_VISIBLE_STROKES = 10
+    WORK_PLOT_VISIBLE_STROKES = 16
     WORK_PLOT_MIN_Y = 0
     WORK_PLOT_MAX_Y = 350
 
-    GUI_FONT = QtGui.QFont('Nunito', 10)
-    GUI_FONT_LARGE = QtGui.QFont('Nunito', 24)
-    GUI_FONT_MEDIUM = QtGui.QFont('Nunito', 16)
+    BOAT_SPEED_PLOT_VISIBLE_STROKES = 16
+    BOAT_SPEED_PLOT_MIN_Y = 0
+    BOAT_SPEED_PLOT_MAX_Y = 10
+
+    GUI_FONT = QtGui.QFont('Nunito SemiBold', 12)
+    GUI_FONT_LARGE = QtGui.QFont('Nunito SemiBold', 24)
+    GUI_FONT_MEDIUM = QtGui.QFont('Nunito SemiBold', 16)
 
     def __init__(self, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
@@ -70,9 +74,15 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         # Build button bar
         self.button_bar_layout = QtWidgets.QHBoxLayout()
         self.start_button = QtWidgets.QPushButton('Start')
-        #self.stop_button.setStyleSheet(
-        #    'background-color: #E03A3E; border: none; color: #ffffff'
-        #)
+        self.start_button.setFlat(True)
+        # Start button style
+        palette = self.start_button.palette()
+        palette.setColor(palette.Button, QColor('#E03A3E'))
+        palette.setColor(palette.ButtonText, QColor('white'))
+        self.start_button.setAutoFillBackground(True)
+        self.start_button.setPalette(palette)
+        self.start_button.update()
+
         # Appearance
         self.start_button.setFont(self.GUI_FONT)
         self.start_button.setMinimumSize(97, 60)
@@ -150,11 +160,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.ydata = [0.0 for i in range(self.PLOT_VISIBLE_SAMPLES)]
 
         self.work_per_stroke_data = [0.0 for i in range(self.WORK_PLOT_VISIBLE_STROKES)]
+        self.boat_speed_data = [0.0 for i in range(self.WORK_PLOT_VISIBLE_STROKES)]
         self.seen_strokes = 0
 
-        # Add torque chart
         ############################################
-        # Axes
+        # Add torque chart
         self.torque_plot = QChart()
         #self.torque_plot.setAnimationOptions(QChart.GridAxisAnimations)
         self.torque_plot.legend().setVisible(False)
@@ -167,7 +177,14 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_series = QLineSeries(self)
         for i in range(self.PLOT_VISIBLE_SAMPLES):
             self.torque_plot_series.append(0, 0)
-        self.torque_plot_series.setColor(QColor('red'))
+        #self.torque_plot_series.setColor(QColor('#009DDC'))
+        pen = self.torque_plot_series.pen()
+        pen.setWidth(4)
+        pen.setColor(QColor('#009DDC'))
+        pen.setJoinStyle(QtCore.Qt.RoundJoin)
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        self.torque_plot_series.setPen(pen)
+
 
         # Area series
         self.torque_plot_area_series = QAreaSeries()
@@ -175,30 +192,37 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_area_series.setLowerSeries(QLineSeries(self))
         for i in range(self.PLOT_VISIBLE_SAMPLES):
             self.torque_plot_area_series.lowerSeries().append(0, 0)
-        self.torque_plot_area_series.setColor(QColor('blue'))
+        self.torque_plot_area_series.setColor(QColor('#009DDC'))
 
         # Compose plot
-        self.torque_plot.addSeries(self.torque_plot_area_series)
-        self.torque_plot_area_series.attachAxis(self.torque_plot_horizontal_axis)
-        self.torque_plot_area_series.attachAxis(self.torque_plot_vertical_axis)
+        # self.torque_plot.addSeries(self.torque_plot_area_series)
+        # self.torque_plot_area_series.attachAxis(self.torque_plot_horizontal_axis)
+        # self.torque_plot_area_series.attachAxis(self.torque_plot_vertical_axis)
         self.torque_plot.addSeries(self.torque_plot_series)
         self.torque_plot_series.attachAxis(self.torque_plot_horizontal_axis)
         self.torque_plot_series.attachAxis(self.torque_plot_vertical_axis)
 
         # Set axes range
         self.torque_plot_vertical_axis.setRange(self.PLOT_MIN_Y, self.PLOT_MAX_Y)
-        self.torque_plot_vertical_axis.setTickCount(2)
+        #self.torque_plot_vertical_axis.setTickCount(10)
         self.torque_plot_vertical_axis.setVisible(False)
-        self.torque_plot_horizontal_axis.setRange(-8, 0)
+        self.torque_plot_horizontal_axis.setRange(-self.PLOT_TIME_WINDOW_SECONDS, 0)
         self.torque_plot_horizontal_axis.setVisible(False)
-        self.torque_plot_vertical_axis.setTickCount(10)
 
         # Add plot view to GUI
         self.torque_plot_chartview = QChartView(self.torque_plot)
         self.torque_plot_chartview.setRenderHint(QPainter.Antialiasing)
-        self.torque_plot_chartview.setMinimumHeight(250)
-        self.torque_plot_chartview.resize(250, 250)
-        self.charts_panel_layout.addWidget(self.torque_plot_chartview)
+        #self.torque_plot_chartview.setMinimumHeight(250)
+        #self.torque_plot_chartview.resize(250, 250)
+
+        self.torque_plot_box = QtWidgets.QGroupBox("Force")
+        self.torque_plot_box.setFont(self.GUI_FONT)
+        self.torque_plot_box.setAlignment(QtCore.Qt.AlignLeft)
+        self.torque_plot_box_layout = QtWidgets.QVBoxLayout()
+        self.torque_plot_box_layout.addWidget(self.torque_plot_chartview)
+        self.torque_plot_box.setLayout(self.torque_plot_box_layout)
+
+        self.charts_panel_layout.addWidget(self.torque_plot_box)
         ############################################
 
         ############################################
@@ -226,16 +250,73 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         # Set axes range
         self.work_plot_vertical_axis.setRange(self.WORK_PLOT_MIN_Y, self.WORK_PLOT_MAX_Y)
         self.work_plot_vertical_axis.setTickCount(8)
-        self.work_plot_vertical_axis.setVisible(True)
+        self.work_plot_vertical_axis.setVisible(False)
         self.work_plot_horizontal_axis.append("1")
         self.work_plot_horizontal_axis.setVisible(False)
 
         # Add plot view to GUI
         self.work_plot_chartview = QChartView(self.work_plot)
         self.work_plot_chartview.setRenderHint(QPainter.Antialiasing)
-        self.work_plot_chartview.setMinimumHeight(250)
-        self.work_plot_chartview.resize(250, 250)
-        self.charts_panel_layout.addWidget(self.work_plot_chartview)
+        #self.work_plot_chartview.setMinimumHeight(250)
+        #self.work_plot_chartview.resize(250, 250)
+
+        self.work_plot_box = QtWidgets.QGroupBox("Work per stroke")
+        self.work_plot_box.setFont(self.GUI_FONT)
+
+        self.work_plot_box.setAlignment(QtCore.Qt.AlignLeft)
+        self.work_plot_box_layout = QtWidgets.QVBoxLayout()
+        self.work_plot_box_layout.addWidget(self.work_plot_chartview)
+        self.work_plot_box.setLayout(self.work_plot_box_layout)
+
+        self.charts_panel_layout.addWidget(self.work_plot_box)
+        ############################################
+
+        ############################################
+        # Add boat speed chart
+        self.boat_speed_plot = QChart()
+        self.boat_speed_plot.legend().setVisible(False)
+        self.boat_speed_plot_horizontal_axis = QBarCategoryAxis()
+        self.boat_speed_plot_vertical_axis = QValueAxis()
+        self.boat_speed_plot.addAxis(self.boat_speed_plot_vertical_axis, QtCore.Qt.AlignLeft)
+        self.boat_speed_plot.addAxis(self.boat_speed_plot_horizontal_axis, QtCore.Qt.AlignBottom)
+
+        # Define series
+        self.boat_speed_plot_series = QBarSeries()
+        self.boat_speed_plot_bar_set_list = [QBarSet(str(i)) for i in range(self.BOAT_SPEED_PLOT_VISIBLE_STROKES)]
+        self.boat_speed_plot_series.append(self.boat_speed_plot_bar_set_list)
+        for bar_set in self.boat_speed_plot_bar_set_list:
+            bar_set.append(0)
+        self.boat_speed_plot_series.setBarWidth(1.0)
+
+        # Compose plot
+        self.boat_speed_plot.addSeries(self.boat_speed_plot_series)
+        self.boat_speed_plot_series.attachAxis(self.boat_speed_plot_horizontal_axis)
+        self.boat_speed_plot_series.attachAxis(self.boat_speed_plot_vertical_axis)
+
+        # Set axes range
+        self.boat_speed_plot_vertical_axis.setRange(self.BOAT_SPEED_PLOT_MIN_Y, self.BOAT_SPEED_PLOT_MAX_Y)
+        self.boat_speed_plot_vertical_axis.setTickCount(8)
+        self.boat_speed_plot_vertical_axis.setVisible(False)
+        self.boat_speed_plot_horizontal_axis.append("1")
+        self.boat_speed_plot_horizontal_axis.setVisible(False)
+
+        # Add plot view to GUI
+        self.boat_speed_plot_chartview = QChartView(self.boat_speed_plot)
+        self.boat_speed_plot_chartview.setRenderHint(QPainter.Antialiasing)
+        #self.boat_speed_plot_chartview.setMinimumHeight(250)
+        #self.boat_speed_plot_chartview.resize(250, 250)
+
+        self.boat_speed_plot_box = QtWidgets.QGroupBox("Boat speed")
+        self.boat_speed_plot_box.setFont(self.GUI_FONT)
+
+        self.boat_speed_plot_box.setAlignment(QtCore.Qt.AlignLeft)
+        self.boat_speed_plot_box_layout = QtWidgets.QVBoxLayout()
+        self.boat_speed_plot_box_layout.addWidget(self.boat_speed_plot_chartview)
+        self.boat_speed_plot_box.setLayout(self.boat_speed_plot_box_layout)
+
+        self.charts_panel_layout.addWidget(self.boat_speed_plot_box)
+
+
         ############################################
 
         # Set interaction behavior
@@ -264,10 +345,21 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         value = self.work_per_stroke_data[-1]
         value_rel = int(value * 255 / self.WORK_PLOT_MAX_Y)
         new_bar_set.append(value)
-        new_bar_set.setColor(QColor(value_rel, value_rel, value_rel))
+        new_bar_set.setColor(QColor('#009DDC'))  # QColor(value_rel, value_rel, value_rel))
         # Append new set, and remove oldest
         self.work_plot_series.append(new_bar_set)
         self.work_plot_series.remove(self.work_plot_series.barSets()[0])
+
+    def update_boat_speed_plot(self):
+        # Create new bar set
+        new_bar_set = QBarSet(str(self.seen_strokes))
+        value = self.boat_speed_data[-1]
+        value_rel = int(value * 255 / self.BOAT_SPEED_PLOT_MAX_Y)
+        new_bar_set.append(value)
+        new_bar_set.setColor(QColor('#009DDC'))  # QColor(value_rel, value_rel, value_rel))
+        # Append new set, and remove oldest
+        self.boat_speed_plot_series.append(new_bar_set)
+        self.boat_speed_plot_series.remove(self.boat_speed_plot_series.barSets()[0])
 
     def start(self):
         if not self.started:
@@ -309,9 +401,22 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.spm_label.setText('%.1f spm' % spm)
             self.stroke_ratio_label.setText('%.1f:1 ratio' % ratio)
             # Work plot
-            self.work_per_stroke_data = self.work_per_stroke_data[1:] + [self.workout.person.strokes.values[-1].work_done_by_person]
+            self.work_per_stroke_data = self.work_per_stroke_data[1:] + \
+                                        [self.workout.person.strokes.values[-1].work_done_by_person]
             self.update_work_plot()
             self.seen_strokes += 1
+            # Boat speed plot
+            average_boat_speed = self.workout.boat.speed.get_average_value(
+                start_time=self.workout.person.strokes.values[-1].start_time,
+                end_time=self.workout.person.strokes.values[-1].end_time
+            )
+            self.boat_speed_data = self.boat_speed_data[1:] + [average_boat_speed]
+            self.boat_speed_label.setText('%0.2f m/s' % average_boat_speed)
+            split_time_seconds = 500.0 / average_boat_speed
+            minutes = split_time_seconds // 60
+            seconds = split_time_seconds % 60
+            self.split_time_label.setText('%d:%02d /500m' % (minutes, seconds))
+            self.update_boat_speed_plot()
 
     def timer_tick(self):
         # Do nothing if we haven't received an encoder pulse yet.
@@ -325,15 +430,15 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.time_label.setText(time_string)
 
 
-data_source = ds.CsvFile(
+app_data_source = ds.CsvFile(
     "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",
     sample_delay=True,
     threaded=True
 )
 
-#data_source = ds.PiGpioClient(ip_address='192.168.1.217', pigpio_port=9876, gpio_pin_number=17)
+#app_data_source = ds.PiGpioClient(ip_address='192.168.1.217', pigpio_port=9876, gpio_pin_number=17)
 print('Connected!')
 app = QtWidgets.QApplication(sys.argv)
-w = RowingMonitorMainWindow(data_source)
-w.resize(900, 600)
+w = RowingMonitorMainWindow(app_data_source)
+w.resize(800, 800)
 app.exec_()
