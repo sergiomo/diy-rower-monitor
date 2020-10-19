@@ -51,11 +51,13 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     BOAT_SPEED_PLOT_MAX_Y = 10
 
     GUI_FONT = QtGui.QFont('Nunito SemiBold', 12)
-    GUI_FONT_LARGE = QtGui.QFont('Nunito SemiBold', 24)
-    GUI_FONT_MEDIUM = QtGui.QFont('Nunito SemiBold', 16)
+    GUI_FONT_LARGE = QtGui.QFont('Nunito', 24)
+    GUI_FONT_MEDIUM = QtGui.QFont('Nunito', 16)
 
     def __init__(self, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
+
+        self.setWindowTitle('Rowing Monitor')
 
         self.redraw_lock = Lock()
         self.workout = wo.WorkoutMetricsTracker(data_source)
@@ -72,9 +74,13 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.app_layout.setContentsMargins(0, 0, 0, 0) #(left, top, right, bottom)
 
         # Build button bar
-        self.button_bar_layout = QtWidgets.QHBoxLayout()
+        self.button_bar_background_widget = QtWidgets.QWidget(self.main_widget)
+        self.button_bar_background_widget.setObjectName('ButtonBarBackground')
+        self.button_bar_background_widget.setStyleSheet('QWidget#ButtonBarBackground {background-color: #F1F1F1;}')
+        self.button_bar_layout = QtWidgets.QHBoxLayout(self.button_bar_background_widget)
         self.start_button = QtWidgets.QPushButton('Start')
         self.start_button.setFlat(True)
+
         # Start button style
         palette = self.start_button.palette()
         palette.setColor(palette.Button, QColor('#E03A3E'))
@@ -82,25 +88,25 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.start_button.setAutoFillBackground(True)
         self.start_button.setPalette(palette)
         self.start_button.update()
-
-        # Appearance
         self.start_button.setFont(self.GUI_FONT)
         self.start_button.setMinimumSize(97, 60)
         self.start_button.setMaximumSize(97, 60)
+
         # Add to main window
         self.button_bar_layout.addWidget(self.start_button)
+        #self.button_bar_layout.addWidget(self.button_bar_background_widget)
         self.button_bar_layout.setAlignment(QtCore.Qt.AlignLeft)
         self.button_bar_layout.setContentsMargins(0, 0, 0, 0) #(left, top, right, bottom)
-        self.app_layout.addLayout(self.button_bar_layout)
+        self.app_layout.addWidget(self.button_bar_background_widget)#.addLayout(self.button_bar_layout)
 
         self.stats_layout = QtWidgets.QHBoxLayout()
+        self.stats_layout.setContentsMargins(0, 0, 0, 0)
+        self.stats_layout.setSpacing(0)
         self.app_layout.addLayout(self.stats_layout)
 
         # Build workout stats bar
         self.metrics_panel_layout = QtWidgets.QVBoxLayout()
         self.charts_panel_layout = QtWidgets.QVBoxLayout()
-        self.metrics_panel_layout.setContentsMargins(60, 10, 60, 60) #(left, top, right, bottom)
-        self.charts_panel_layout.setContentsMargins(0, 10, 60, 60) #(left, top, right, bottom)
 
         self.workout_totals_layout = QtWidgets.QVBoxLayout()
         self.time_label = QtWidgets.QLabel('0:00')
@@ -111,7 +117,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.distance_label.setFixedHeight(30)
         self.workout_totals_layout.addWidget(self.time_label)
         self.workout_totals_layout.addWidget(self.distance_label)
-        self.workout_totals_layout.setSpacing(0)
+        #self.workout_totals_layout.setSpacing(0)
+        self.workout_totals_layout.setContentsMargins(0, 0, 0, 30)
         self.metrics_panel_layout.addLayout(self.workout_totals_layout)
 
         self.stroke_stats_layout = QtWidgets.QVBoxLayout()
@@ -123,7 +130,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.stroke_ratio_label.setFixedHeight(30)
         self.stroke_stats_layout.addWidget(self.spm_label)
         self.stroke_stats_layout.addWidget(self.stroke_ratio_label)
-        self.stroke_stats_layout.setSpacing(0)
+        #self.stroke_stats_layout.setSpacing(0)
+        self.stroke_stats_layout.setContentsMargins(0, 30, 0, 30)
         self.metrics_panel_layout.addLayout(self.stroke_stats_layout)
 
         self.boat_stats_layout = QtWidgets.QVBoxLayout()
@@ -135,10 +143,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.split_time_label.setFixedHeight(30)
         self.boat_stats_layout.addWidget(self.boat_speed_label)
         self.boat_stats_layout.addWidget(self.split_time_label)
-        self.boat_stats_layout.setSpacing(0)
-        self.boat_stats_layout.setContentsMargins(0, 0, 0, 0)
-        #self.boat_stats_layout.setSizeConstraint(QtWidgets.QLayout.SetFixedSize)
-        #self.boat_stats_layout.setSizeConstraint(QtWidgets.QLayout.SetMinAndMaxSize)
+        #self.boat_stats_layout.setSpacing(0)
+        self.boat_stats_layout.setContentsMargins(0, 30, 0, 0)
         self.metrics_panel_layout.addLayout(self.boat_stats_layout)
 
         # Appearance
@@ -151,8 +157,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
 
         # Add to main window
-        self.metrics_panel_layout.setSpacing(30)
-        self.metrics_panel_layout.setContentsMargins(30, 0, 30, 0) #(left, top, right, bottom)
+        self.metrics_panel_layout.setSpacing(0)
+        self.metrics_panel_layout.setContentsMargins(60, 30, 30, 30) #(left, top, right, bottom)
+        self.charts_panel_layout.setSpacing(30)
+        self.charts_panel_layout.setContentsMargins(30, 30, 60, 60)#(30, 30, 60, 60) #(left, top, right, bottom)
         self.stats_layout.addLayout(self.metrics_panel_layout)
         self.stats_layout.addLayout(self.charts_panel_layout)
 
@@ -166,6 +174,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         ############################################
         # Add torque chart
         self.torque_plot = QChart()
+        self.torque_plot.setContentsMargins(-26, -26, -26, -26)
         #self.torque_plot.setAnimationOptions(QChart.GridAxisAnimations)
         self.torque_plot.legend().setVisible(False)
         self.torque_plot_horizontal_axis = QValueAxis()
@@ -228,6 +237,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         ############################################
         # Add work chart
         self.work_plot = QChart()
+        self.work_plot.setContentsMargins(-26, -26, -26, -26)
         self.work_plot.legend().setVisible(False)
         self.work_plot_horizontal_axis = QBarCategoryAxis()
         self.work_plot_vertical_axis = QValueAxis()
@@ -274,6 +284,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         ############################################
         # Add boat speed chart
         self.boat_speed_plot = QChart()
+        self.boat_speed_plot.setContentsMargins(-26, -26, -26, -26)
+        #self.boat_speed_plot.setBackgroundRoundness(0)
         self.boat_speed_plot.legend().setVisible(False)
         self.boat_speed_plot_horizontal_axis = QBarCategoryAxis()
         self.boat_speed_plot_vertical_axis = QValueAxis()
@@ -303,11 +315,14 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         # Add plot view to GUI
         self.boat_speed_plot_chartview = QChartView(self.boat_speed_plot)
         self.boat_speed_plot_chartview.setRenderHint(QPainter.Antialiasing)
-        #self.boat_speed_plot_chartview.setMinimumHeight(250)
-        #self.boat_speed_plot_chartview.resize(250, 250)
-
+        #self.boat_speed_plot_chartview.setContentsMargins(0, 0, 0, 0)
         self.boat_speed_plot_box = QtWidgets.QGroupBox("Boat speed")
         self.boat_speed_plot_box.setFont(self.GUI_FONT)
+        #self.boat_speed_plot_box.setFlat(True)
+        #self.boat_speed_plot_box.setContentsMargins(0, 0, 0, 0)
+        #self.boat_speed_plot_box.setObjectName("BoatSpeedGB")  # Changed here...
+        #self.boat_speed_plot_box.setStyleSheet('QGroupBox {background-color: white;}')
+        #self.main_widget.setStyleSheet('QGroupBox::title { background-color: blue }')
 
         self.boat_speed_plot_box.setAlignment(QtCore.Qt.AlignLeft)
         self.boat_speed_plot_box_layout = QtWidgets.QVBoxLayout()
@@ -439,6 +454,10 @@ app_data_source = ds.CsvFile(
 #app_data_source = ds.PiGpioClient(ip_address='192.168.1.217', pigpio_port=9876, gpio_pin_number=17)
 print('Connected!')
 app = QtWidgets.QApplication(sys.argv)
+pal = app.palette()
+pal.setColor(QtGui.QPalette.Window, QtCore.Qt.white)
+app.setPalette(pal)
+
 w = RowingMonitorMainWindow(app_data_source)
-w.resize(800, 800)
+w.resize(700, 700)
 app.exec_()
