@@ -294,22 +294,22 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         if self.start_timestamp is None:
             self.start_timestamp = QtCore.QTime.currentTime()
         # Update distance
-        distance = self.workout.num_flywheel_revolutions
+        distance = self.workout.boat.position.values[-1]
         self.distance_label.setText('%d m' % distance)
-        if len(self.workout.torque) > 0:
-            self.ydata = self.ydata[1:] + [self.workout.torque.values[-1]]
-            self.xdata = self.xdata[1:] + [self.workout.torque.timestamps[-1]]
+        if len(self.workout.person.torque) > 0:
+            self.ydata = self.ydata[1:] + [self.workout.person.torque.values[-1]]
+            self.xdata = self.xdata[1:] + [self.workout.person.torque.timestamps[-1]]
             self.update_torque_plot()
         # Update SPM
-        new_stroke_info_available = len(self.workout.strokes) > self.seen_strokes
+        new_stroke_info_available = len(self.workout.person.strokes) > self.seen_strokes
         if new_stroke_info_available:
             # SPM indicator
-            spm = 60 / self.workout.strokes.values[-1].duration
-            ratio = self.workout.strokes.values[-1].recovery_to_drive_ratio
+            spm = 60 / self.workout.person.strokes.values[-1].duration
+            ratio = self.workout.person.strokes.values[-1].recovery_to_drive_ratio
             self.spm_label.setText('%.1f spm' % spm)
             self.stroke_ratio_label.setText('%.1f:1 ratio' % ratio)
             # Work plot
-            self.work_per_stroke_data = self.work_per_stroke_data[1:] + [self.workout.strokes.values[-1].work_done_by_person]
+            self.work_per_stroke_data = self.work_per_stroke_data[1:] + [self.workout.person.strokes.values[-1].work_done_by_person]
             self.update_work_plot()
             self.seen_strokes += 1
 
@@ -331,7 +331,7 @@ data_source = ds.CsvFile(
     threaded=True
 )
 
-#data_source = ds.PiGpioClient(ip_address='192.168.1.218', pigpio_port=9876, gpio_pin_number=17)
+#data_source = ds.PiGpioClient(ip_address='192.168.1.217', pigpio_port=9876, gpio_pin_number=17)
 print('Connected!')
 app = QtWidgets.QApplication(sys.argv)
 w = RowingMonitorMainWindow(data_source)
