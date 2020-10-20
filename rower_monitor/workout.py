@@ -1,91 +1,67 @@
-from time_series import TimeSeries
-import rowing_stats
+import csv
+import datetime
+import os
 
-# MY_HARDWARE_SETUP = {
-#     rpi ip = 192.168.1.242
-#     rpi pigpiod port = 9876
-#     rpi pin num = 17
-#     rower type = magnetic
-#     flywheel sensor pulses per rev = 4
-#     flywheel sensor pulses are evenly spaced = false
-# }
+from . import boat_metrics
+from . import data_sources as ds
+from . import machine_metrics
+from . import person_metrics
+
 
 class WorkoutMetricsTracker:
     def __init__(
             self,
+            config,
             data_source,
-            flywheel_metrics_tracker_class=rowing_stats.FlywheelMetricsTracker,
-            stroke_metrics_tracker_class=rowing_stats.StrokeMetricsTracker,
-            damping_model_estimator_class=rowing_stats.LinearDampingFactorEstimator,
+            machine_metrics_tracker_class=machine_metrics.MachineMetricsTracker,
+            person_metrics_tracker_class=person_metrics.PersonMetricsTracker,
+            boat_model_class=boat_metrics.RotatingWheel,
     ):
         self.data_source = data_source
-        self.flywheel_metrics_tracker = flywheel_metrics_tracker_class(self)
-        self.stroke_metrics_tracker = stroke_metrics_tracker_class(self)
-        self.damping_model_estimator = damping_model_estimator_class(self)
 
-        # We store the raw ticks for debugging and to facilitate future development.
-        self.raw_ticks = []
-        self.flywheel_sensor_pulse_timestamps = []
-        self.speed = TimeSeries()
-        self.acceleration = TimeSeries()
-        self.torque = TimeSeries()
-        self.strokes = TimeSeries()
+        self.machine = machine_metrics_tracker_class(
+            workout=self,
+            flywheel_moment_of_inertia=config.flywheel_moment_of_inertia,
+            damping_model_estimator_class=config.damping_model_estimator_class,
+            num_encoder_pulses_per_revolution=config.num_flywheel_encoder_pulses_per_revolution,
+        )
+        self.person = person_metrics_tracker_class(self)
+        self.boat = boat_model_class(self)
+
         self._ui_callback = None
+        self._qt_signal_emitter = None
 
-    def start(self, ui_callback=None):
+    def start(self, ui_callback=None, qt_signal_emitter=None):
         self._ui_callback = ui_callback
+        self._qt_signal_emitter = qt_signal_emitter
         self.data_source.start(self.flywheel_sensor_pulse_handler)
 
     def stop(self):
         self.data_source.stop()
 
     def flywheel_sensor_pulse_handler(self, sensor_pulse_time, raw_tick_value):
-        self.raw_ticks.append(raw_tick_value)
-        self.flywheel_sensor_pulse_timestamps.append(sensor_pulse_time)
-        self.flywheel_metrics_tracker.update()
-        # self._update_tick_stats()
-        # Updates torque time series, check for the new stroke heuristic and updates the stroke time
-        # series if needed.
-        # self._update_torque_time_series()
-        # if self._new_stroke_indicator():
-        #     self._process_new_stroke()
-        #     self._update_stroke_stats()
+        self.machine.update(
+            sensor_pulse_time=sensor_pulse_time,
+            raw_tick_value=raw_tick_value
+        )
+        self.person.update()
+        self.boat.update()
 
-
-        self.stroke_metrics_tracker.update()
-
-        if self._ui_callback is not None:
+        if self._qt_signal_emitter is not None:
+            self._qt_signal_emitter.updated.emit()
+        elif self._ui_callback is not None:
             self._ui_callback(self)
 
-
-"""
-    def _update_tick_stats(self):
-        # Refresh stats that are updated for each rising edge event
-        # total workout duration
-        # instantaneous watts (averaged over some time period)
-        # watt chart
-
-        # Force curve
-        # Total work done (boat distance)
-        return
-
-    def _update_stroke_stats(self):
-        # Refresh stat that are updated for each stroke
-        # Stroke rate
-        return
-"""
-
-"""
-    def save_workout(self, output_folder_path=""):
-        # TODO: save raw ticks, clean ticks, speed, and acceleration
-        timestamp = self.workout_start.strftime("%Y-%m-%d %Hh%Mm%Ss")
-        output_file_name = timestamp + ".csv"
-        output_file_path = os.path.append(output_folder_path, output_file_name)
+    # TODO: change this to take in output_file_path -- decide file names within app.py
+    def save(self, output_folder_path, output_file_name=None):
+        if output_file_name is None:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %Hh%Mm%Ss")
+            output_file_name = timestamp + ".csv"
+        output_file_path = os.path.join(output_folder_path, output_file_name)
         with open(output_file_path, "w", newline="") as output_file:
             csv_writer = csv.writer(output_file)
             csv_writer.writerow(
-                [self.CSV_OUTPUT_TICKS_COLUMN_NAME, self.CSV_OUTPUT_SPEED_COLUMN_NAME, ]
+                [ds.CsvFile.RAW_TICKS_COLUMN_NAME]
             )
-            for idx in range(len(self.speed)):
-                csv_writer.writerow([self.speed[idx][1], self.speed[idx][0]])
-"""
+            csv_writer.writerows([[x] for x in self.machine.raw_ticks])
+        return

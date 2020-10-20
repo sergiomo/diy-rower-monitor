@@ -23,6 +23,37 @@ class TimeSeries:
             last_included_item_idx = len(included_mask) - included_mask[::-1].index(True)
             return self[first_included_item_idx: last_included_item_idx]
 
+    def get_average_value(self, start_time=None, end_time=None):
+        if start_time is None and end_time is None:
+            data = self
+        else:
+            data = self.get_time_slice(start_time, end_time)
+        total_time = data.timestamps[-1] - data.timestamps[0]
+        accum = 0.0
+        for idx, (value, timestamp) in enumerate(data):
+            if idx == len(data) - 1:
+                duration = 0
+            else:
+                next_timestamp = data.timestamps[idx+1]
+                duration = next_timestamp - timestamp  # TODO: is this the right way to calculate this?
+            accum += value * duration
+        return accum / total_time
+
+    def interpolate_midpoints(self):
+        """Returns interpolated samples at the midpoints of the existing data points. We use this to align the
+        timestamps of acceleration and speed time series."""
+        # TODO: Fancy polynomial interpolation
+        result = TimeSeries()
+        for idx, (value, timestamp) in enumerate(self):
+            if idx == len(self) - 1:
+                break
+            next_value_in_ts, next_timestamp_in_ts = self[idx + 1]
+            result.append(
+                value=(value + next_value_in_ts) / 2.0,
+                timestamp=(timestamp + next_timestamp_in_ts) / 2.0
+            )
+        return result
+
     def __getitem__(self, idx):
         if type(idx) is int:
             return self.values[idx], self.timestamps[idx]

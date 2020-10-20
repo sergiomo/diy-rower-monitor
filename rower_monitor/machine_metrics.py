@@ -1,42 +1,72 @@
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-from time_series import TimeSeries
+from .time_series import TimeSeries
 
 
-class FlywheelMetricsTracker:
-    # Tracks flywheel speed and acceleration. Assumes the encoder is not properly aligned.
-    NUM_ENCODER_PULSES_PER_REVOLUTION = 4
-
-    def __init__(
-            self,
-            workout,
-            num_flywheel_sensor_pulses_per_revolution=NUM_ENCODER_PULSES_PER_REVOLUTION,
-    ):
+class MachineMetricsTracker:
+    def __init__(self,
+                 workout,
+                 flywheel_moment_of_inertia,
+                 damping_model_estimator_class,
+                 num_encoder_pulses_per_revolution):
         self.workout = workout
-        self.num_flywheel_sensor_pulses_per_revolution = (
-            num_flywheel_sensor_pulses_per_revolution
-        )
+        self.num_encoder_pulses_per_revolution = num_encoder_pulses_per_revolution
+        self.flywheel_moment_of_inertia = flywheel_moment_of_inertia
 
-    def update(self):
+        self.raw_ticks = []
+        self.encoder_pulse_timestamps = []
+        self.flywheel_speed = TimeSeries()
+        self.flywheel_acceleration = TimeSeries()
+
+        self.damping_model_estimator = damping_model_estimator_class(workout)
+        self.damping_models = []
+        self.damping_torque = TimeSeries()
+        self.strokes_seen = 0
+
+    def update(self, sensor_pulse_time, raw_tick_value):
+        self.update_flywheel_metrics(
+            sensor_pulse_time=sensor_pulse_time,
+            raw_tick_value=raw_tick_value
+        )
+        # There's a bit of a chicken-and-egg problem here between MachineMetricsTracker.update_damping_metrics (which
+        # requires at least one stroke to be available) and PersonMetricsTracker.update (which requires at least one
+        # damping torque sample. Both components will assume the damping torque is zero during the first stroke,
+        # as a trade-off between accuracy and responsiveness.
+        self.update_damping_metrics()
+
+    def update_flywheel_metrics(self, sensor_pulse_time, raw_tick_value):
+        self.raw_ticks.append(raw_tick_value)
+        self.encoder_pulse_timestamps.append(sensor_pulse_time)
         self._update_speed_time_series()
         self._update_acceleration_time_series()
 
+    def update_damping_metrics(self):
+        new_stroke_info_available = len(self.workout.person.strokes) > self.strokes_seen
+        if new_stroke_info_available:
+            self.damping_models.append(
+                self.damping_model_estimator.fit_model_to_stroke_recovery_data(
+                    stroke=self.workout.person.strokes.values[-1]
+                )
+            )
+            self.strokes_seen += 1
+        self._update_damping_torque_time_series()
+
     def _update_speed_time_series(self):
         # Have we seen at least one full revolution?
-        if len(self.workout.flywheel_sensor_pulse_timestamps) < self.NUM_ENCODER_PULSES_PER_REVOLUTION + 1:
+        if len(self.encoder_pulse_timestamps) < self.num_encoder_pulses_per_revolution + 1:
             return
         speed_data_point, data_point_timestamp = self._get_speed_data_point_estimate()
-        self.workout.speed.append(speed_data_point, data_point_timestamp)
+        self.flywheel_speed.append(speed_data_point, data_point_timestamp)
 
     def _get_speed_data_point_estimate(self):
         # Account for the fact that the holes in the flywheel aren't perfectly aligned. We compute
         # speed by measuring the time between sensor pulses caused by the same hole. The unit of
         # these timestamps is seconds since the start of the workout.
-        start_of_revolution_timestamp = self.workout.flywheel_sensor_pulse_timestamps[
-            -1 * (self.NUM_ENCODER_PULSES_PER_REVOLUTION + 1)
+        start_of_revolution_timestamp = self.encoder_pulse_timestamps[
+            -1 * (self.num_encoder_pulses_per_revolution + 1)
         ]
-        end_of_revolution_timestamp = self.workout.flywheel_sensor_pulse_timestamps[-1]
+        end_of_revolution_timestamp = self.encoder_pulse_timestamps[-1]
         # Compute the average speed observed in this revolution, in units of revolutions per second.
         revolution_time = end_of_revolution_timestamp - start_of_revolution_timestamp
         speed_data_point = 1.0 / revolution_time
@@ -47,20 +77,20 @@ class FlywheelMetricsTracker:
         return speed_data_point, data_point_timestamp
 
     def _update_acceleration_time_series(self):
-        if len(self.workout.speed) < 2:
+        if len(self.flywheel_speed) < 2:
             return
         (
             acceleration_data_point,
             data_point_timestamp,
         ) = self._get_acceleration_data_point_estimate()
-        self.workout.acceleration.append(
+        self.flywheel_acceleration.append(
             value=acceleration_data_point,
             timestamp=data_point_timestamp,
         )
 
     def _get_acceleration_data_point_estimate(self):
-        speed_now_value, speed_now_timestamp = self.workout.speed[-1]
-        previous_speed_value, previous_speed_timestamp = self.workout.speed[-2]
+        speed_now_value, speed_now_timestamp = self.flywheel_speed[-1]
+        previous_speed_value, previous_speed_timestamp = self.flywheel_speed[-2]
         speed_delta = speed_now_value - previous_speed_value
         time_delta = speed_now_timestamp - previous_speed_timestamp
         # Compute average acceleration observed in this time period, in units of rev / (s)^2
@@ -72,108 +102,20 @@ class FlywheelMetricsTracker:
         data_point_timestamp = (time_delta / 2) + previous_speed_timestamp
         return acceleration_data_point, data_point_timestamp
 
-
-class StrokeMetricsTracker:
-    # This is the filter, in seconds, that we apply when we detect the start of a new stroke.
-    # It's probably safe to assume that the user will never reach 60 strokes per minute.
-    MINIMUM_STROKE_DURATION_FILTER = 1.0
-    FLYWHEEL_MOMENT_OF_INERTIA = 1.0
-
-    def __init__(self, workout):
-        self.workout = workout
-        self._start_of_ongoing_stroke_timestamp = float("-inf")
-        self._start_of_ongoing_stroke_idx = 0
-
-    def update(self):
-        # Are we at the start of a new stroke? If so, analyze the data and update the stroke time
-        # series, if not return without doing anything.
-        if self._new_stroke_indicator():
-            self._process_new_stroke()
-
-        if len(self.workout.acceleration) < 1:
+    def _update_damping_torque_time_series(self):
+        if len(self.flywheel_speed) < 2:
             return
-        if len(self.workout.strokes) > 0:
-            # Calculate rower_acc = net_acc - damping_acc
-            last_fitted_model = self.workout.strokes.values[-1].fitted_damping_model
-            speed_value = (self.workout.speed.values[-1] + self.workout.speed.values[-2]) / 2.0
-            flywheel_deceleration_due_to_damping = last_fitted_model.single_point(speed_value)
+        # If we don't have a fitted model yet, assume the torque is zero
+        if len(self.damping_models) < 1:
+            damping_torque = 0.0
         else:
-            flywheel_deceleration_due_to_damping = 0.0
-        person_acc = max(0.0, self.workout.acceleration.values[-1] - flywheel_deceleration_due_to_damping)
-        self.workout.torque.append(
-            value=person_acc,
-            timestamp=self.workout.acceleration.timestamps[-1]
+            speed_value = (self.flywheel_speed.values[-1] + self.flywheel_speed.values[-2]) / 2.0
+            damping_acceleration = self.damping_models[-1].single_point(speed_value=speed_value)
+            damping_torque = damping_acceleration * self.flywheel_moment_of_inertia
+        self.damping_torque.append(
+            value=damping_torque,
+            timestamp=self.flywheel_acceleration.timestamps[-1]
         )
-
-    # This is a rough check that tells us if we have started a new stroke. This doesn't necessarily
-    # flag the first few samples of the new stroke.
-    def _new_stroke_indicator(self):
-        if len(self.workout.acceleration) < 2:
-            return False
-        # Acceleration went from negative to positive
-        acceleration_rising_edge = (
-            self.workout.acceleration.values[-1] >= 0 and
-            self.workout.acceleration.values[-2] < 0
-        )
-        time_since_start_of_stroke_in_seconds = (
-            self.workout.acceleration.timestamps[-1] - self._start_of_ongoing_stroke_timestamp
-        )
-        return acceleration_rising_edge and \
-            (time_since_start_of_stroke_in_seconds > self.MINIMUM_STROKE_DURATION_FILTER)
-
-    def _process_new_stroke(self):
-        # For now assume _new_stroke_indicator gives us a perfect segmentation between strokes, and
-        # triggers exactly on the first sample of a new stroke.
-        start_of_this_stroke_idx = self._start_of_ongoing_stroke_idx
-        end_of_this_stroke_idx = len(self.workout.acceleration) - 2
-
-        self.workout.strokes.append(
-            value=Stroke(
-                workout=self.workout,
-                start_idx=start_of_this_stroke_idx,
-                end_idx=end_of_this_stroke_idx,
-            ),
-            timestamp=self.workout.acceleration.timestamps[start_of_this_stroke_idx],
-        )
-        # The last sample currently in the acceleration time series will be the first sample of the
-        # next stroke.
-        self._start_of_ongoing_stroke_idx = len(self.workout.acceleration) - 1
-        # fmt: off
-        self._start_of_ongoing_stroke_timestamp = self.workout.acceleration.timestamps[-1]
-        # fmt: on
-
-
-class Stroke:
-    def __init__(self,
-                 workout,
-                 start_idx,
-                 end_idx):
-        self.workout = workout
-        self.start_idx = start_idx
-        self.end_idx = end_idx
-        self.num_samples = end_idx - start_idx
-
-        self._segment_stroke()
-
-        self.fitted_damping_model = (
-            self.workout.damping_model_estimator.fit_model_to_stroke_recovery_data(self)
-        )
-
-    def _segment_stroke(self):
-        acceleration_samples = self.workout.acceleration[self.start_idx: self.end_idx].values
-        min_acceleration_value = min(acceleration_samples)
-        # Get the index (relative to workout.acceleration) of the last occurrence of the smallest acceleration value
-        # in this stroke.
-        min_acceleration_value_idx = self.start_idx \
-            + len(acceleration_samples) \
-            - acceleration_samples[::-1].index(min_acceleration_value)
-        self.start_of_drive_idx = self.start_idx
-        self.end_of_drive_idx = min_acceleration_value_idx
-        self.start_of_recovery_idx = min_acceleration_value_idx + 1
-        self.end_of_recovery_idx = self.end_idx
-
-    def estimate_damping_deceleration(self, speed_value):
-        return self.fitted_damping_model.single_point(speed_value)
 
 
 class LinearDampingFactorEstimator:
@@ -191,34 +133,27 @@ class LinearDampingFactorEstimator:
         self.workout = workout
 
     def fit_model_to_stroke_recovery_data(self, stroke):
-        acceleration_samples_ts = self.workout.acceleration[
+        acceleration_samples_ts = self.workout.machine.flywheel_acceleration[
             stroke.start_of_recovery_idx: stroke.end_of_recovery_idx + 1
         ]
-        # Speed has 1 extra sample at the beginning, and we include 1 extra sample at the start so we can interpolate
+        # Speed has 1 extra sample at the beginning, and we include 1 extra sample at the end so we can interpolate
         # to match the acceleration time series timestamps.
-        speed_samples_ts = self.workout.speed[
+        speed_samples_ts = self.workout.machine.flywheel_speed[
             stroke.start_of_recovery_idx: stroke.end_of_recovery_idx + 2
         ]
         # These are interpolated samples to align them time-wise with the acceleration time series.
-        interpolated_speed_samples_ts = TimeSeries()
-        for idx, (value, timestamp) in enumerate(speed_samples_ts):
-            if idx == len(speed_samples_ts) - 1:
-                break
-            next_value_in_ts, next_timestamp_in_ts = speed_samples_ts[idx + 1]
-            interpolated_speed_samples_ts.append(
-                value=(value + next_value_in_ts) / 2.0,
-                timestamp=(timestamp + next_timestamp_in_ts) / 2.0)
+        interpolated_speed_samples_ts = speed_samples_ts.interpolate_midpoints()
         included_acceleration_samples_ts = self.get_window(acceleration_samples_ts)
         # This is a very slow-speed stroke and there aren't enough samples to fit the damping model.
         if included_acceleration_samples_ts is None:
             # Try to return the same model as the previous stroke
-            if len(self.workout.strokes) > 0:
-                previous_stroke = self.workout.strokes.values[-1]
+            if len(self.workout.machine.damping_models) > 0:
+                previous_model = self.workout.machine.damping_models[-1]
                 return self.FittedLinearDampingFactorModel(
-                    intercept=previous_stroke.fitted_damping_model.intercept,
-                    slope=previous_stroke.fitted_damping_model.slope
+                    intercept=previous_model.intercept,
+                    slope=previous_model.slope
                 )
-            # Return a model wil all-zeros parameters. This will cause us to overestimate the person-applied torque
+            # Return a model with all-zeros parameters. This will cause us to overestimate the person-applied torque
             # for this stroke. This is a very slow and weak stroke so this shouldn't matter too much.
             else:
                 return self.FittedLinearDampingFactorModel(

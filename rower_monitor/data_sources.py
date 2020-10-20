@@ -1,5 +1,7 @@
 import csv
 import pigpio
+import time
+import threading
 
 
 class DataSource:
@@ -18,9 +20,6 @@ class PiGpioClient(DataSource):
     # Constant taken from https://github.com/joan2937/pigpio/blob/v76/pigpio.py#L961
     RPI_TIMER_MAX_VALUE = 1 << 32
     RPI_TICK_PERIOD_IN_SECONDS = 1e-6
-    RPI_IP_ADDRESS = "192.168.1.242"
-    RPI_PIGPIO_PORT = 9876
-    RPI_PIN_NUMBER = 17
 
     # The reflective infrared sensor does not have hysteresis, so we need to filter out glitches in
     # software.
@@ -28,9 +27,9 @@ class PiGpioClient(DataSource):
 
     def __init__(
         self,
-        ip_address=RPI_IP_ADDRESS,
-        pigpio_port=RPI_PIGPIO_PORT,
-        gpio_pin_number=RPI_PIN_NUMBER,
+        ip_address,
+        pigpio_port,
+        gpio_pin_number,
         glitch_filter_us=GLITCH_FILTER_US,
     ):
         self.ip_address = ip_address
@@ -111,31 +110,73 @@ class PiGpioClient(DataSource):
 # Provides data from a pre-recorded workout. Useful for development and debugging.
 class CsvFile(PiGpioClient):
     DUMMY_VALUE = 0
+    RAW_TICKS_COLUMN_NAME = 'ticks'
+    SAMPLE_DELAY_SECONDS = 0.016
 
     def __init__(
         self,
-        sensor_pulse_event_handler_callback,
         ticks_csv_file_path,
-        raw_ticks_column_name="ticks",
+        raw_ticks_column_name=RAW_TICKS_COLUMN_NAME,
+        sample_delay=False,
+        threaded=True,
     ):
-        self.sensor_pulse_event_handler_callback = sensor_pulse_event_handler_callback
         self.ticks_csv_file_path = ticks_csv_file_path
         self.raw_ticks_column_name = raw_ticks_column_name
         self._first_raw_tick_value = None
         self._last_raw_tick_value = None
         self._num_rpi_counter_rollovers = 0
+        self.sample_delay = sample_delay
+        self.threaded = threaded
+        self._reader_thread = None
 
     def start(self, sensor_pulse_event_handler_callback):
-        with open(self.ticks_csv_file_path) as input_file:
-            csv_reader = csv.DictReader(input_file)
-            for row in csv_reader:
-                raw_ticks = int(row[self.raw_ticks_column_name])
-                if raw_ticks == self.DUMMY_VALUE:
-                    continue
-                sensor_pulse_event_handler_callback(
-                    self.get_timestamp_from_raw_ticks(raw_ticks),
-                    raw_ticks
-                )
+        if self.threaded:
+            self._reader_thread = CsvReaderThread(
+                sensor_pulse_event_handler_callback=sensor_pulse_event_handler_callback,
+                parent=self
+            )
+        else:
+            with open(self.ticks_csv_file_path) as input_file:
+                csv_reader = csv.DictReader(input_file)
+                for row in csv_reader:
+                    raw_ticks = int(row[self.raw_ticks_column_name])
+                    if raw_ticks == self.DUMMY_VALUE:
+                        continue
+                    sensor_pulse_event_handler_callback(
+                        self.get_timestamp_from_raw_ticks(raw_ticks),
+                        raw_ticks
+                    )
+                    if self.sample_delay:
+                        time.sleep(self.SAMPLE_DELAY_SECONDS)
 
     def stop(self):
-        return
+        if self._reader_thread is not None:
+            self._reader_thread.stop()
+
+
+class CsvReaderThread(threading.Thread):
+    def __init__(self, sensor_pulse_event_handler_callback, parent):
+        threading.Thread.__init__(self)
+        self.parent = parent
+        self.input_file = open(self.parent.ticks_csv_file_path)
+        self.csv_reader = csv.DictReader(self.input_file)
+        self.sensor_pulse_event_handler_callback = sensor_pulse_event_handler_callback
+        self.go = True
+        self.start()
+
+    def run(self):
+        for row in self.csv_reader:
+            if not self.go:
+                break
+            raw_ticks = int(row[self.parent.raw_ticks_column_name])
+            if raw_ticks == self.parent.DUMMY_VALUE:
+                continue
+            self.sensor_pulse_event_handler_callback(
+                self.parent.get_timestamp_from_raw_ticks(raw_ticks),
+                raw_ticks
+            )
+            if self.parent.sample_delay:
+                time.sleep(self.parent.SAMPLE_DELAY_SECONDS)
+
+    def stop(self):
+        self.go = False
