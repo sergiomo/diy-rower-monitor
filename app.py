@@ -436,7 +436,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         if new_stroke_info_available:
             # SPM indicator
             spm = 60 / self.workout.person.strokes.values[-1].duration
-            ratio = self.workout.person.strokes.values[-1].recovery_to_drive_ratio
+            ratio = self.workout.person.strokes.values[-1].drive_to_recovery_ratio
             self.spm_label.setText(self._format_strokes_per_minute(spm))
             self.stroke_ratio_label.setText(self._format_stroke_ratio(ratio))
             # Work plot

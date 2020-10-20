@@ -1,4 +1,5 @@
 - Write pytest tests
+- Fix drive:recovery ratio calculation.
 
 - Analysis
   - Implement fancy polynomial interpolation in TimeSeries.interpolate_midpoints

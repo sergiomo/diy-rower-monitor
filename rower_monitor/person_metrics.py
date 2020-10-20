@@ -10,22 +10,22 @@ class Stroke:
         self.start_idx = start_idx
         self.end_idx = end_idx
         self.num_samples = end_idx - start_idx
-
-
         self.start_time = self.workout.machine.flywheel_acceleration.timestamps[start_idx]
         self.end_time = self.workout.machine.flywheel_acceleration.timestamps[end_idx]
+        self.duration = self.end_time - self.start_time
 
         (self.start_of_drive_idx,
          self.end_of_drive_idx,
          self.start_of_recovery_idx,
          self.end_of_recovery_idx) = self._segment_stroke()
 
-        self.duration = self.end_time - self.start_time
         drive_duration = self.workout.machine.flywheel_acceleration.timestamps[self.end_of_drive_idx] - \
                          self.workout.machine.flywheel_acceleration.timestamps[self.start_of_drive_idx]
-        recovery_duration = self.duration - drive_duration
-        # Ratio is 2:1 when recovery is twice as long as drive
-        self.recovery_to_drive_ratio = recovery_duration / drive_duration
+        recovery_duration = self.workout.machine.flywheel_acceleration.timestamps[self.end_of_recovery_idx] - \
+                            self.workout.machine.flywheel_acceleration.timestamps[self.start_of_recovery_idx]
+        # Ratio is 1:2 when recovery is twice as long as drive
+        # TODO: This doesn't work well, probably due to bad stroke-to-stroke segmentation.
+        self.drive_to_recovery_ratio = recovery_duration / drive_duration
         self.work_done_by_person = self._calculate_work_done_by_person()
         self.average_power = self.work_done_by_person / self.duration
 

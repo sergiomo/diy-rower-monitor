@@ -63,5 +63,5 @@ class WorkoutMetricsTracker:
             csv_writer.writerow(
                 [ds.CsvFile.RAW_TICKS_COLUMN_NAME]
             )
-            csv_writer.writerows([[x] for x in self.raw_ticks])
+            csv_writer.writerows([[x] for x in self.machine.raw_ticks])
         return
