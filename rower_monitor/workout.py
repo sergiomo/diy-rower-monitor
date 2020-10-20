@@ -1,25 +1,30 @@
 import csv
-import os
 import datetime
+import os
 
-#from time_series import TimeSeries
-import boat_metrics
-import data_sources as ds
-import machine_metrics
-import person_metrics
+from . import boat_metrics
+from . import data_sources as ds
+from . import machine_metrics
+from . import person_metrics
 
 
 class WorkoutMetricsTracker:
     def __init__(
             self,
+            config,
             data_source,
-            machine_metrics_tracker_class=machine_metrics.MyMagneticRowerMetricsTracker,
+            machine_metrics_tracker_class=machine_metrics.MachineMetricsTracker,
             person_metrics_tracker_class=person_metrics.PersonMetricsTracker,
             boat_model_class=boat_metrics.RotatingWheel,
     ):
         self.data_source = data_source
 
-        self.machine = machine_metrics_tracker_class(self)
+        self.machine = machine_metrics_tracker_class(
+            workout=self,
+            flywheel_moment_of_inertia=config.flywheel_moment_of_inertia,
+            damping_model_estimator_class=config.damping_model_estimator_class,
+            num_encoder_pulses_per_revolution=config.num_flywheel_encoder_pulses_per_revolution,
+        )
         self.person = person_metrics_tracker_class(self)
         self.boat = boat_model_class(self)
 

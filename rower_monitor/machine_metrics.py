@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-from time_series import TimeSeries
+from .time_series import TimeSeries
 
 
 class MachineMetricsTracker:
@@ -54,7 +54,7 @@ class MachineMetricsTracker:
 
     def _update_speed_time_series(self):
         # Have we seen at least one full revolution?
-        if len(self.encoder_pulse_timestamps) < self.NUM_ENCODER_PULSES_PER_REVOLUTION + 1:
+        if len(self.encoder_pulse_timestamps) < self.num_encoder_pulses_per_revolution + 1:
             return
         speed_data_point, data_point_timestamp = self._get_speed_data_point_estimate()
         self.flywheel_speed.append(speed_data_point, data_point_timestamp)
@@ -64,7 +64,7 @@ class MachineMetricsTracker:
         # speed by measuring the time between sensor pulses caused by the same hole. The unit of
         # these timestamps is seconds since the start of the workout.
         start_of_revolution_timestamp = self.encoder_pulse_timestamps[
-            -1 * (self.NUM_ENCODER_PULSES_PER_REVOLUTION + 1)
+            -1 * (self.num_encoder_pulses_per_revolution + 1)
         ]
         end_of_revolution_timestamp = self.encoder_pulse_timestamps[-1]
         # Compute the average speed observed in this revolution, in units of revolutions per second.
@@ -115,20 +115,6 @@ class MachineMetricsTracker:
         self.damping_torque.append(
             value=damping_torque,
             timestamp=self.flywheel_acceleration.timestamps[-1]
-        )
-
-
-class MyMagneticRowerMetricsTracker(MachineMetricsTracker):
-    # Tracks flywheel speed and acceleration. Assumes the encoder is not properly aligned.
-    NUM_ENCODER_PULSES_PER_REVOLUTION = 4
-    FLYWHEEL_MOMENT_OF_INTERTIA = 1.0
-
-    def __init__(self, workout):
-        super().__init__(
-            workout=workout,
-            flywheel_moment_of_inertia=self.FLYWHEEL_MOMENT_OF_INTERTIA,
-            damping_model_estimator_class=LinearDampingFactorEstimator,
-            num_encoder_pulses_per_revolution=self.NUM_ENCODER_PULSES_PER_REVOLUTION,
         )
 
 

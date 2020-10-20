@@ -1,0 +1,10 @@
+Raspberry PI:
+  ip_address: 192.168.1.217
+  pigpio_daemon_port: 9876  # To launch the daemon, run: sudo pigpiod -b 10000 -p 9876
+  gpio_pin_numer: 17
+Rowing Machine:
+  num_flywheel_encoder_pulses_per_revolution: 4
+  machine_type: magnetic  # For now, only magnetic rowers are supported.
+  flywheel_moment_of_inertia: 1.0  # This value doesn't affect the app since the charts don't have a vertical axis!
+App:
+  log_folder_path: 'C:\Users\checo\Dropbox\rower\logs'

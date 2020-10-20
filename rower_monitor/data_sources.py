@@ -20,9 +20,6 @@ class PiGpioClient(DataSource):
     # Constant taken from https://github.com/joan2937/pigpio/blob/v76/pigpio.py#L961
     RPI_TIMER_MAX_VALUE = 1 << 32
     RPI_TICK_PERIOD_IN_SECONDS = 1e-6
-    RPI_IP_ADDRESS = "192.168.1.218"
-    RPI_PIGPIO_PORT = 9876
-    RPI_PIN_NUMBER = 17
 
     # The reflective infrared sensor does not have hysteresis, so we need to filter out glitches in
     # software.
@@ -30,9 +27,9 @@ class PiGpioClient(DataSource):
 
     def __init__(
         self,
-        ip_address=RPI_IP_ADDRESS,
-        pigpio_port=RPI_PIGPIO_PORT,
-        gpio_pin_number=RPI_PIN_NUMBER,
+        ip_address,
+        pigpio_port,
+        gpio_pin_number,
         glitch_filter_us=GLITCH_FILTER_US,
     ):
         self.ip_address = ip_address

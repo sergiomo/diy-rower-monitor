@@ -1,20 +1,18 @@
-import data_sources as ds
-import workout as wo
+from rower_monitor import data_sources as ds
+from rower_monitor import workout as wo
+from rower_monitor import config_loader as cf
 import time
 
 import matplotlib.pyplot as plt
 
-
-#csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-10 09h54m05s.csv")
-#csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-22 21h39m58s.csv")
-#csv_source = ds.CsvFile(None, "C:\\Users\\checo\\Desktop\\rower\\2020-06-20 17h25m29s.csv")
 csv_source = ds.CsvFile(
     "C:\\Users\\checo\\Desktop\\rower\\2020-08-24 22h18m35s.csv",
     threaded=False,
     sample_delay=False,
 )
 
-workout = wo.WorkoutMetricsTracker(csv_source)
+config_data = cf.load_config()
+workout = wo.WorkoutMetricsTracker(config=config_data, data_source=csv_source)
 workout.start()
 workout.stop()
 
@@ -28,7 +26,7 @@ plt.show()
 
 
 print('done')
-blaa
+exit()
 
 
 plt.plot(workout.machine.flywheel_acceleration.timestamps, workout.machine.flywheel_acceleration.values)

@@ -1,22 +1,23 @@
 import sys
 
-import data_sources as ds
-import workout as wo
+from rower_monitor import config_loader as cf
+from rower_monitor import data_sources as ds
+from rower_monitor import workout as wo
 
-from threading import Lock
 from PyQt5 import QtCore, QtWidgets, QtGui
-from PyQt5.QtCore import QPointF
 from PyQt5.QtGui import QPainter, QColor
 from PyQt5.QtChart import (
+    QAreaSeries,
+    QBarCategoryAxis,
+    QBarSeries,
+    QBarSet,
     QChart,
     QChartView,
     QLineSeries,
     QValueAxis,
-    QAreaSeries,
-    QBarSeries,
-    QBarSet,
-    QBarCategoryAxis,
 )
+
+DEV_MODE = False
 
 
 # Idea taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
@@ -28,10 +29,10 @@ class SignalEmitter(QtCore.QObject):
 
 
 class RowingMonitorMainWindow(QtWidgets.QMainWindow):
+    COLOR_RED = QColor('#E03A3E')
+    COLOR_BLUE = QColor('#009DDC')
 
-    DEV_MODE = True
-
-    LOG_FOLDER_PATH = 'C:\\Users\\checo\\Dropbox\\rower\\logs'
+    DISABLE_LOGGING = False
 
     PLOT_VISIBLE_SAMPLES = 200
     PLOT_MIN_Y = -1
@@ -42,11 +43,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_DPI = 300
     PLOT_FAST_DRAWING = False
 
-    WORK_PLOT_VISIBLE_STROKES = 16
+    WORK_PLOT_VISIBLE_STROKES = 64
     WORK_PLOT_MIN_Y = 0
     WORK_PLOT_MAX_Y = 350
 
-    BOAT_SPEED_PLOT_VISIBLE_STROKES = 16
+    BOAT_SPEED_PLOT_VISIBLE_STROKES = 64
     BOAT_SPEED_PLOT_MIN_Y = 0
     BOAT_SPEED_PLOT_MAX_Y = 10
 
@@ -54,13 +55,17 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     GUI_FONT_LARGE = QtGui.QFont('Nunito', 24)
     GUI_FONT_MEDIUM = QtGui.QFont('Nunito', 16)
 
-    def __init__(self, data_source, *args, **kwargs):
+    def __init__(self, config, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
 
         self.setWindowTitle('Rowing Monitor')
 
-        self.redraw_lock = Lock()
-        self.workout = wo.WorkoutMetricsTracker(data_source)
+        self.config = config
+        self.log_folder_path = config.log_folder_path
+        self.workout = wo.WorkoutMetricsTracker(
+            config=config,
+            data_source=data_source
+        )
 
         # Connect workut emitter to UI update
         self.workout_qt_emitter = SignalEmitter()
@@ -109,8 +114,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.charts_panel_layout = QtWidgets.QVBoxLayout()
 
         self.workout_totals_layout = QtWidgets.QVBoxLayout()
-        self.time_label = QtWidgets.QLabel('0:00')
-        self.distance_label = QtWidgets.QLabel('0 m')
+        self.time_label = QtWidgets.QLabel(self._format_total_workout_time(0))
+        self.distance_label = QtWidgets.QLabel(self._format_total_workout_distance(0))
         self.time_label.setAlignment(QtCore.Qt.AlignCenter)
         self.distance_label.setAlignment(QtCore.Qt.AlignCenter)
         self.time_label.setFixedHeight(40)
@@ -122,8 +127,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.metrics_panel_layout.addLayout(self.workout_totals_layout)
 
         self.stroke_stats_layout = QtWidgets.QVBoxLayout()
-        self.spm_label = QtWidgets.QLabel('0.00 spm')
-        self.stroke_ratio_label = QtWidgets.QLabel('1:1 ratio')
+        self.spm_label = QtWidgets.QLabel(self._format_strokes_per_minute(99))
+        self.stroke_ratio_label = QtWidgets.QLabel(self._format_stroke_ratio(1))
         self.spm_label.setAlignment(QtCore.Qt.AlignCenter)
         self.stroke_ratio_label.setAlignment(QtCore.Qt.AlignCenter)
         self.spm_label.setFixedHeight(40)
@@ -135,8 +140,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.metrics_panel_layout.addLayout(self.stroke_stats_layout)
 
         self.boat_stats_layout = QtWidgets.QVBoxLayout()
-        self.boat_speed_label = QtWidgets.QLabel('0.00 m/s')
-        self.split_time_label = QtWidgets.QLabel('0:00 /500m')
+        self.boat_speed_label = QtWidgets.QLabel(self._format_boat_speed(0))
+        self.split_time_label = QtWidgets.QLabel(self._format_boat_pace(0))
         self.boat_speed_label.setAlignment(QtCore.Qt.AlignCenter)
         self.split_time_label.setAlignment(QtCore.Qt.AlignCenter)
         self.boat_speed_label.setFixedHeight(40)
@@ -188,12 +193,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.torque_plot_series.append(0, 0)
         #self.torque_plot_series.setColor(QColor('#009DDC'))
         pen = self.torque_plot_series.pen()
-        pen.setWidth(4)
-        pen.setColor(QColor('#009DDC'))
+        pen.setWidth(3)
+        pen.setColor(self.COLOR_BLUE)
         pen.setJoinStyle(QtCore.Qt.RoundJoin)
         pen.setCapStyle(QtCore.Qt.RoundCap)
         self.torque_plot_series.setPen(pen)
-
 
         # Area series
         self.torque_plot_area_series = QAreaSeries()
@@ -201,7 +205,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_area_series.setLowerSeries(QLineSeries(self))
         for i in range(self.PLOT_VISIBLE_SAMPLES):
             self.torque_plot_area_series.lowerSeries().append(0, 0)
-        self.torque_plot_area_series.setColor(QColor('#009DDC'))
+        self.torque_plot_area_series.setColor(self.COLOR_BLUE)
 
         # Compose plot
         # self.torque_plot.addSeries(self.torque_plot_area_series)
@@ -360,7 +364,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         value = self.work_per_stroke_data[-1]
         value_rel = int(value * 255 / self.WORK_PLOT_MAX_Y)
         new_bar_set.append(value)
-        new_bar_set.setColor(QColor('#009DDC'))  # QColor(value_rel, value_rel, value_rel))
+        new_bar_set.setColor(self.COLOR_BLUE)  # QColor(value_rel, value_rel, value_rel))
         # Append new set, and remove oldest
         self.work_plot_series.append(new_bar_set)
         self.work_plot_series.remove(self.work_plot_series.barSets()[0])
@@ -371,7 +375,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         value = self.boat_speed_data[-1]
         value_rel = int(value * 255 / self.BOAT_SPEED_PLOT_MAX_Y)
         new_bar_set.append(value)
-        new_bar_set.setColor(QColor('#009DDC'))  # QColor(value_rel, value_rel, value_rel))
+        new_bar_set.setColor(self.COLOR_BLUE) # QColor(value_rel, value_rel, value_rel))
         # Append new set, and remove oldest
         self.boat_speed_plot_series.append(new_bar_set)
         self.boat_speed_plot_series.remove(self.boat_speed_plot_series.barSets()[0])
@@ -393,8 +397,28 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     def stop_workout(self):
         self.timer.stop()
         self.workout.stop()
-        if not self.DEV_MODE:
-            self.workout.save(output_folder_path=self.LOG_FOLDER_PATH)
+        if not self.DISABLE_LOGGING and not DEV_MODE:
+            self.workout.save(output_folder_path=self.log_folder_path)
+
+    def _format_total_workout_time(self, value_seconds):
+        minutes = value_seconds // 60
+        seconds = value_seconds % 60
+        return '%d:%02d' % (minutes, seconds)
+
+    def _format_total_workout_distance(self, value):
+        return f'{int(value):,} m'
+
+    def _format_strokes_per_minute(self, value):
+        return '%.1f spm' % value
+
+    def _format_stroke_ratio(self, value):
+        return '1:%.1f ratio' % value
+
+    def _format_boat_speed(self, value):
+        return '%0.2f m/s' % value
+
+    def _format_boat_pace(self, value_seconds):
+        return '%s /500m' % (self._format_total_workout_time(value_seconds))
 
     def ui_callback(self):
         # If this is the first pulse, capture the current time
@@ -402,7 +426,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.start_timestamp = QtCore.QTime.currentTime()
         # Update distance
         distance = self.workout.boat.position.values[-1]
-        self.distance_label.setText('%d m' % distance)
+        self.distance_label.setText(self._format_total_workout_distance(distance))
         if len(self.workout.person.torque) > 0:
             self.ydata = self.ydata[1:] + [self.workout.person.torque.values[-1]]
             self.xdata = self.xdata[1:] + [self.workout.person.torque.timestamps[-1]]
@@ -413,8 +437,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             # SPM indicator
             spm = 60 / self.workout.person.strokes.values[-1].duration
             ratio = self.workout.person.strokes.values[-1].recovery_to_drive_ratio
-            self.spm_label.setText('%.1f spm' % spm)
-            self.stroke_ratio_label.setText('%.1f:1 ratio' % ratio)
+            self.spm_label.setText(self._format_strokes_per_minute(spm))
+            self.stroke_ratio_label.setText(self._format_stroke_ratio(ratio))
             # Work plot
             self.work_per_stroke_data = self.work_per_stroke_data[1:] + \
                                         [self.workout.person.strokes.values[-1].work_done_by_person]
@@ -426,11 +450,9 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
                 end_time=self.workout.person.strokes.values[-1].end_time
             )
             self.boat_speed_data = self.boat_speed_data[1:] + [average_boat_speed]
-            self.boat_speed_label.setText('%0.2f m/s' % average_boat_speed)
+            self.boat_speed_label.setText(self._format_boat_speed(average_boat_speed))
             split_time_seconds = 500.0 / average_boat_speed
-            minutes = split_time_seconds // 60
-            seconds = split_time_seconds % 60
-            self.split_time_label.setText('%d:%02d /500m' % (minutes, seconds))
+            self.split_time_label.setText(self._format_boat_pace(split_time_seconds))
             self.update_boat_speed_plot()
 
     def timer_tick(self):
@@ -439,25 +461,28 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             return
         # Update workout time label
         time_since_start = self.start_timestamp.secsTo(QtCore.QTime.currentTime())
-        minutes = time_since_start // 60
-        seconds = time_since_start % 60
-        time_string = '%d:%02d' % (minutes, seconds)
-        self.time_label.setText(time_string)
+        self.time_label.setText(self._format_total_workout_time(time_since_start))
 
 
-app_data_source = ds.CsvFile(
-    "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",
-    sample_delay=True,
-    threaded=True
-)
-
-#app_data_source = ds.PiGpioClient(ip_address='192.168.1.217', pigpio_port=9876, gpio_pin_number=17)
+app_config = cf.load_config()
+if DEV_MODE:
+    app_data_source = ds.CsvFile(
+        "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",
+        sample_delay=True,
+        threaded=True
+    )
+else:
+    app_data_source = ds.PiGpioClient(
+        ip_address=app_config.ip_address,
+        pigpio_port=app_config.pigpio_daemon_port,
+        gpio_pin_number=app_config.gpio_pin_numer
+    )
 print('Connected!')
 app = QtWidgets.QApplication(sys.argv)
 pal = app.palette()
 pal.setColor(QtGui.QPalette.Window, QtCore.Qt.white)
 app.setPalette(pal)
 
-w = RowingMonitorMainWindow(app_data_source)
+w = RowingMonitorMainWindow(app_config, app_data_source)
 w.resize(700, 700)
 app.exec_()
