@@ -1,3 +1,5 @@
+- Write pytest tests
+
 - Analysis
   - Implement fancy polynomial interpolation in TimeSeries.interpolate_midpoints
   - In StrokeMetricsTracker._process_new_stroke, implement more sophisticated stroke-to-stroke segmentation.
