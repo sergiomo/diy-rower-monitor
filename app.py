@@ -4,6 +4,8 @@ from rower_monitor import config_loader as cf
 from rower_monitor import data_sources as ds
 from rower_monitor import workout as wo
 
+import color_scales
+
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtGui import QPainter, QColor
 from PyQt5.QtChart import (
@@ -17,7 +19,7 @@ from PyQt5.QtChart import (
     QValueAxis,
 )
 
-DEV_MODE = False
+DEV_MODE = True
 
 
 # Idea taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
@@ -29,10 +31,12 @@ class SignalEmitter(QtCore.QObject):
 
 
 class RowingMonitorMainWindow(QtWidgets.QMainWindow):
+    DISABLE_LOGGING = False
+
     COLOR_RED = QColor('#E03A3E')
     COLOR_BLUE = QColor('#009DDC')
-
-    DISABLE_LOGGING = False
+    COLOR_DARK_GREY = QColor('#434343')
+    COLOR_BLACK = QColor('#000000')
 
     PLOT_VISIBLE_SAMPLES = 200
     PLOT_MIN_Y = -1
@@ -88,7 +92,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 
         # Start button style
         palette = self.start_button.palette()
-        palette.setColor(palette.Button, QColor('#E03A3E'))
+        palette.setColor(palette.Button, self.COLOR_RED)
         palette.setColor(palette.ButtonText, QColor('white'))
         self.start_button.setAutoFillBackground(True)
         self.start_button.setPalette(palette)
@@ -193,8 +197,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.torque_plot_series.append(0, 0)
         #self.torque_plot_series.setColor(QColor('#009DDC'))
         pen = self.torque_plot_series.pen()
-        pen.setWidth(3)
-        pen.setColor(self.COLOR_BLUE)
+        pen.setWidth(1)
+        pen.setColor(self.COLOR_DARK_GREY)
         pen.setJoinStyle(QtCore.Qt.RoundJoin)
         pen.setCapStyle(QtCore.Qt.RoundCap)
         self.torque_plot_series.setPen(pen)
@@ -205,12 +209,13 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_area_series.setLowerSeries(QLineSeries(self))
         for i in range(self.PLOT_VISIBLE_SAMPLES):
             self.torque_plot_area_series.lowerSeries().append(0, 0)
-        self.torque_plot_area_series.setColor(self.COLOR_BLUE)
+        self.torque_plot_area_series.setColor(self.COLOR_DARK_GREY)
+        self.torque_plot_area_series.setBorderColor(self.COLOR_DARK_GREY)
 
         # Compose plot
-        # self.torque_plot.addSeries(self.torque_plot_area_series)
-        # self.torque_plot_area_series.attachAxis(self.torque_plot_horizontal_axis)
-        # self.torque_plot_area_series.attachAxis(self.torque_plot_vertical_axis)
+        self.torque_plot.addSeries(self.torque_plot_area_series)
+        self.torque_plot_area_series.attachAxis(self.torque_plot_horizontal_axis)
+        self.torque_plot_area_series.attachAxis(self.torque_plot_vertical_axis)
         self.torque_plot.addSeries(self.torque_plot_series)
         self.torque_plot_series.attachAxis(self.torque_plot_horizontal_axis)
         self.torque_plot_series.attachAxis(self.torque_plot_vertical_axis)
@@ -362,9 +367,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         # Create new bar set
         new_bar_set = QBarSet(str(self.seen_strokes))
         value = self.work_per_stroke_data[-1]
-        value_rel = int(value * 255 / self.WORK_PLOT_MAX_Y)
         new_bar_set.append(value)
-        new_bar_set.setColor(self.COLOR_BLUE)  # QColor(value_rel, value_rel, value_rel))
+        new_bar_set.setColor(
+            color_scales.viridis.get_color_from_normalized_value(value / self.WORK_PLOT_MAX_Y)
+        )
         # Append new set, and remove oldest
         self.work_plot_series.append(new_bar_set)
         self.work_plot_series.remove(self.work_plot_series.barSets()[0])
@@ -373,9 +379,10 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         # Create new bar set
         new_bar_set = QBarSet(str(self.seen_strokes))
         value = self.boat_speed_data[-1]
-        value_rel = int(value * 255 / self.BOAT_SPEED_PLOT_MAX_Y)
         new_bar_set.append(value)
-        new_bar_set.setColor(self.COLOR_BLUE) # QColor(value_rel, value_rel, value_rel))
+        new_bar_set.setColor(
+            color_scales.plasma.get_color_from_normalized_value(value / self.BOAT_SPEED_PLOT_MAX_Y)
+        )
         # Append new set, and remove oldest
         self.boat_speed_plot_series.append(new_bar_set)
         self.boat_speed_plot_series.remove(self.boat_speed_plot_series.barSets()[0])
