@@ -43,8 +43,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     APPLE_TEAL = QColor(90, 200, 250)
 
     COLOR_RED = QColor('#E03A3E')
-    COLOR_BLUE = MS_BLUE
-    COLOR_LIGHT_BLUE = MS_BLUE_P_2
+    COLOR_BLUE = QColor(28, 28, 28)
+    COLOR_LIGHT_BLUE = QColor(118, 118, 118)
     COLOR_PURPLE = QColor('#963D97')
     COLOR_GREY = QColor('#666666')
     COLOR_DARK_GREY = QColor('#434343')
