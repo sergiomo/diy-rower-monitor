@@ -33,10 +33,24 @@ class SignalEmitter(QtCore.QObject):
 class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     DISABLE_LOGGING = False
 
+    MS_BLUE_M_1 = QColor('#1F5AA2')
+    MS_BLUE = QColor('#2D78D6')
+    MS_BLUE_P_1 = QColor('#3091E2')
+    MS_BLUE_P_2 = QColor('#5FAFEF')
+    MS_BLUE_P_2 = QColor('#91C5F0')
+
+    APPLE_BLUE = QColor(0, 122, 255)
+    APPLE_TEAL = QColor(90, 200, 250)
+
     COLOR_RED = QColor('#E03A3E')
-    COLOR_BLUE = QColor('#009DDC')
+    COLOR_BLUE = MS_BLUE
+    COLOR_LIGHT_BLUE = MS_BLUE_P_2
+    COLOR_PURPLE = QColor('#963D97')
+    COLOR_GREY = QColor('#666666')
     COLOR_DARK_GREY = QColor('#434343')
     COLOR_BLACK = QColor('#000000')
+    COLOR_WHITE = QColor('#FFFFFF')
+    COLOR_LIGHT_GREY = QColor('#F1F1F1')
 
     PLOT_VISIBLE_SAMPLES = 200
     PLOT_MIN_Y = -1
@@ -196,12 +210,20 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         for i in range(self.PLOT_VISIBLE_SAMPLES):
             self.torque_plot_series.append(0, 0)
         #self.torque_plot_series.setColor(QColor('#009DDC'))
+        gradient = QtGui.QLinearGradient(
+            QtCore.QPointF(0, 0.0),   # point to reach first color. (0,0) is the top of the chart area
+            QtCore.QPointF(0, 1.0)  # point to reach the second color. (0,1) is the bottom of the chart area
+        )
+        gradient.setColorAt(0.0, self.COLOR_LIGHT_BLUE)   # top
+        gradient.setColorAt(1.0, self.COLOR_BLUE)  # bottom
+        gradient.setCoordinateMode(QtGui.QGradient.StretchToDeviceMode)
         pen = self.torque_plot_series.pen()
         pen.setWidth(1)
-        pen.setColor(self.COLOR_DARK_GREY)
+        #pen.setColor(self.COLOR_DARK_GREY)
+        pen.setBrush(gradient)
         pen.setJoinStyle(QtCore.Qt.RoundJoin)
-        pen.setCapStyle(QtCore.Qt.RoundCap)
         self.torque_plot_series.setPen(pen)
+        pen.setCapStyle(QtCore.Qt.RoundCap)
 
         # Area series
         self.torque_plot_area_series = QAreaSeries()
@@ -209,8 +231,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.torque_plot_area_series.setLowerSeries(QLineSeries(self))
         for i in range(self.PLOT_VISIBLE_SAMPLES):
             self.torque_plot_area_series.lowerSeries().append(0, 0)
-        self.torque_plot_area_series.setColor(self.COLOR_DARK_GREY)
-        self.torque_plot_area_series.setBorderColor(self.COLOR_DARK_GREY)
+        #self.torque_plot_area_series.setColor(self.COLOR_DARK_GREY)
+        #self.torque_plot_area_series.setBorderColor(self.COLOR_DARK_GREY)
+        self.torque_plot_area_series.setPen(pen)
+        self.torque_plot_area_series.setBrush(gradient)
+
 
         # Compose plot
         self.torque_plot.addSeries(self.torque_plot_area_series)
@@ -474,7 +499,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
 app_config = cf.load_config()
 if DEV_MODE:
     app_data_source = ds.CsvFile(
-        "C:\\Users\\checo\\Desktop\\rower\\2020-08-28 22h49m22s.csv",
+        "C:\\Users\\checo\\dropbox\\rower\\logs\\2020-10-25 20h24m43s.csv",
         sample_delay=True,
         threaded=True
     )
