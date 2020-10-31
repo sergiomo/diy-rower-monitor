@@ -19,7 +19,7 @@ from PyQt5.QtChart import (
     QValueAxis,
 )
 
-DEV_MODE = True
+DEV_MODE = False
 
 
 # Idea taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
@@ -210,17 +210,17 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         for i in range(self.PLOT_VISIBLE_SAMPLES):
             self.torque_plot_series.append(0, 0)
         #self.torque_plot_series.setColor(QColor('#009DDC'))
-        gradient = QtGui.QLinearGradient(
+        self.gradient = QtGui.QLinearGradient(
             QtCore.QPointF(0, 0.0),   # point to reach first color. (0,0) is the top of the chart area
             QtCore.QPointF(0, 1.0)  # point to reach the second color. (0,1) is the bottom of the chart area
         )
-        gradient.setColorAt(0.0, self.COLOR_LIGHT_BLUE)   # top
-        gradient.setColorAt(1.0, self.COLOR_BLUE)  # bottom
-        gradient.setCoordinateMode(QtGui.QGradient.StretchToDeviceMode)
+        self.gradient.setColorAt(0.0, self.COLOR_LIGHT_BLUE)   # top
+        self.gradient.setColorAt(1.0, self.COLOR_BLUE)  # bottom
+        self.gradient.setCoordinateMode(QtGui.QGradient.StretchToDeviceMode)
         pen = self.torque_plot_series.pen()
         pen.setWidth(1)
         #pen.setColor(self.COLOR_DARK_GREY)
-        pen.setBrush(gradient)
+        pen.setBrush(self.gradient)
         pen.setJoinStyle(QtCore.Qt.RoundJoin)
         self.torque_plot_series.setPen(pen)
         pen.setCapStyle(QtCore.Qt.RoundCap)
@@ -234,7 +234,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         #self.torque_plot_area_series.setColor(self.COLOR_DARK_GREY)
         #self.torque_plot_area_series.setBorderColor(self.COLOR_DARK_GREY)
         self.torque_plot_area_series.setPen(pen)
-        self.torque_plot_area_series.setBrush(gradient)
+        self.torque_plot_area_series.setBrush(self.gradient)
 
 
         # Compose plot
@@ -393,9 +393,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         new_bar_set = QBarSet(str(self.seen_strokes))
         value = self.work_per_stroke_data[-1]
         new_bar_set.append(value)
-        new_bar_set.setColor(
-            color_scales.viridis.get_color_from_normalized_value(value / self.WORK_PLOT_MAX_Y)
-        )
+        new_bar_set.setBrush(self.gradient)
+        #new_bar_set.setColor(
+        #    #color_scales.viridis.get_color_from_normalized_value(value / self.WORK_PLOT_MAX_Y)
+        #    self.COLOR_DARK_GREY
+        #)
         # Append new set, and remove oldest
         self.work_plot_series.append(new_bar_set)
         self.work_plot_series.remove(self.work_plot_series.barSets()[0])
@@ -405,9 +407,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         new_bar_set = QBarSet(str(self.seen_strokes))
         value = self.boat_speed_data[-1]
         new_bar_set.append(value)
-        new_bar_set.setColor(
-            color_scales.plasma.get_color_from_normalized_value(value / self.BOAT_SPEED_PLOT_MAX_Y)
-        )
+        new_bar_set.setBrush(self.gradient)
+        #new_bar_set.setColor(
+        #    #color_scales.plasma.get_color_from_normalized_value(value / self.BOAT_SPEED_PLOT_MAX_Y)
+        #    self.COLOR_DARK_GREY
+        #)
         # Append new set, and remove oldest
         self.boat_speed_plot_series.append(new_bar_set)
         self.boat_speed_plot_series.remove(self.boat_speed_plot_series.barSets()[0])
@@ -516,5 +520,5 @@ pal.setColor(QtGui.QPalette.Window, QtCore.Qt.white)
 app.setPalette(pal)
 
 w = RowingMonitorMainWindow(app_config, app_data_source)
-w.resize(700, 700)
+w.resize(900, 900)
 app.exec_()
