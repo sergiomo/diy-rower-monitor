@@ -20,7 +20,7 @@ from PyQt5.QtChart import (
     QScatterSeries,
 )
 
-DEV_MODE = False
+DEV_MODE = True
 DISABLE_LOGGING = True
 
 
@@ -80,6 +80,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     def __init__(self, config, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
 
+        self.setWindowIcon(QtGui.QIcon('rowboat2.png'))
         self.setWindowTitle('Rowing Monitor')
 
         self.config = config
