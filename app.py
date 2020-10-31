@@ -17,9 +17,11 @@ from PyQt5.QtChart import (
     QChartView,
     QLineSeries,
     QValueAxis,
+    QScatterSeries,
 )
 
-DEV_MODE = False
+DEV_MODE = True
+DISABLE_LOGGING = True
 
 
 # Idea taken from: https://medium.com/@armin.samii/avoiding-random-crashes-when-multithreading-qt-f740dc16059
@@ -31,7 +33,6 @@ class SignalEmitter(QtCore.QObject):
 
 
 class RowingMonitorMainWindow(QtWidgets.QMainWindow):
-    DISABLE_LOGGING = False
 
     MS_BLUE_M_1 = QColor('#1F5AA2')
     MS_BLUE = QColor('#2D78D6')
@@ -60,6 +61,9 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_HEIGHT_INCHES = 1
     PLOT_DPI = 300
     PLOT_FAST_DRAWING = False
+
+    BOAT_PLOT_WINDOW_METERS = 100
+    BOAT_PLOT_TICK_DISTANCE = 20
 
     WORK_PLOT_VISIBLE_STROKES = 64
     WORK_PLOT_MIN_Y = 0
@@ -316,54 +320,61 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         ############################################
 
         ############################################
-        # Add boat speed chart
-        self.boat_speed_plot = QChart()
-        self.boat_speed_plot.setContentsMargins(-26, -26, -26, -26)
-        #self.boat_speed_plot.setBackgroundRoundness(0)
-        self.boat_speed_plot.legend().setVisible(False)
-        self.boat_speed_plot_horizontal_axis = QBarCategoryAxis()
-        self.boat_speed_plot_vertical_axis = QValueAxis()
-        self.boat_speed_plot.addAxis(self.boat_speed_plot_vertical_axis, QtCore.Qt.AlignLeft)
-        self.boat_speed_plot.addAxis(self.boat_speed_plot_horizontal_axis, QtCore.Qt.AlignBottom)
+        # Add boat position chart
+        self.boat_position_plot = QChart()
+        self.boat_position_plot.setContentsMargins(-26, -26, -26, -26)
+        #self.boat_position_plot.setAnimationOptions(QChart.GridAxisAnimations)
+        self.boat_position_plot.legend().setVisible(False)
+        self.boat_position_plot_horizontal_axis = QValueAxis()
+        self.boat_position_plot_vertical_axis = QValueAxis()
+        self.boat_position_plot.addAxis(self.boat_position_plot_vertical_axis, QtCore.Qt.AlignLeft)
+        self.boat_position_plot.addAxis(self.boat_position_plot_horizontal_axis, QtCore.Qt.AlignBottom)
 
         # Define series
-        self.boat_speed_plot_series = QBarSeries()
-        self.boat_speed_plot_bar_set_list = [QBarSet(str(i)) for i in range(self.BOAT_SPEED_PLOT_VISIBLE_STROKES)]
-        self.boat_speed_plot_series.append(self.boat_speed_plot_bar_set_list)
-        for bar_set in self.boat_speed_plot_bar_set_list:
-            bar_set.append(0)
-        self.boat_speed_plot_series.setBarWidth(1.0)
+        self.boat_position_series = QScatterSeries(self)
+        self.boat_position_series.append(0, 0.5)
+        self.boat_position_series.setPointsVisible(True)
+        self.boat_position_series.setMarkerShape(QScatterSeries.MarkerShapeRectangle)
+        self.boat_position_series.setMarkerSize(50)
+
+        boat_image = QtGui.QImage('rowboat.png').scaled(50, 50, QtCore.Qt.KeepAspectRatio).mirrored(True, False)
+        self.boat_position_series.setBrush(QtGui.QBrush(boat_image))
 
         # Compose plot
-        self.boat_speed_plot.addSeries(self.boat_speed_plot_series)
-        self.boat_speed_plot_series.attachAxis(self.boat_speed_plot_horizontal_axis)
-        self.boat_speed_plot_series.attachAxis(self.boat_speed_plot_vertical_axis)
+        self.boat_position_plot.addSeries(self.boat_position_series)
+        self.boat_position_series.attachAxis(self.boat_position_plot_horizontal_axis)
+        self.boat_position_series.attachAxis(self.boat_position_plot_vertical_axis)
 
         # Set axes range
-        self.boat_speed_plot_vertical_axis.setRange(self.BOAT_SPEED_PLOT_MIN_Y, self.BOAT_SPEED_PLOT_MAX_Y)
-        self.boat_speed_plot_vertical_axis.setTickCount(8)
-        self.boat_speed_plot_vertical_axis.setVisible(False)
-        self.boat_speed_plot_horizontal_axis.append("1")
-        self.boat_speed_plot_horizontal_axis.setVisible(False)
+        self.boat_position_plot_vertical_axis.setRange(0, 1)
+        self.boat_position_plot_vertical_axis.setVisible(True)
+        self.boat_position_plot_vertical_axis.setLabelsVisible(False)
+        self.boat_position_plot_vertical_axis.setLabelsFont(QtGui.QFont('Nunito', 1))
+        self.boat_position_plot_vertical_axis.setLineVisible(False)
+        self.boat_position_plot_vertical_axis.setTickCount(2)
+        self.boat_position_plot_horizontal_axis.setRange(
+            -self.BOAT_PLOT_WINDOW_METERS / 2,
+            self.BOAT_PLOT_WINDOW_METERS / 2
+        )
+        self.boat_position_plot_horizontal_axis.setTickAnchor(0)
+        self.boat_position_plot_horizontal_axis.setTickInterval(self.BOAT_PLOT_TICK_DISTANCE)
+        self.boat_position_plot_horizontal_axis.setTickType(QValueAxis.TicksDynamic)
+        self.boat_position_plot_horizontal_axis.setVisible(True)
+        self.boat_position_plot_horizontal_axis.setLabelsFont(QtGui.QFont('Nunito SemiBold', 14))
+        self.boat_position_plot_horizontal_axis.setLabelFormat('%.0f')
 
         # Add plot view to GUI
-        self.boat_speed_plot_chartview = QChartView(self.boat_speed_plot)
-        self.boat_speed_plot_chartview.setRenderHint(QPainter.Antialiasing)
-        #self.boat_speed_plot_chartview.setContentsMargins(0, 0, 0, 0)
-        self.boat_speed_plot_box = QtWidgets.QGroupBox("Boat speed")
-        self.boat_speed_plot_box.setFont(self.GUI_FONT)
-        #self.boat_speed_plot_box.setFlat(True)
-        #self.boat_speed_plot_box.setContentsMargins(0, 0, 0, 0)
-        #self.boat_speed_plot_box.setObjectName("BoatSpeedGB")  # Changed here...
-        #self.boat_speed_plot_box.setStyleSheet('QGroupBox {background-color: white;}')
-        #self.main_widget.setStyleSheet('QGroupBox::title { background-color: blue }')
+        self.boat_position_plot_chartview = QChartView(self.boat_position_plot)
+        self.boat_position_plot_chartview.setRenderHint(QPainter.Antialiasing)
+        self.boat_position_plot_box = QtWidgets.QGroupBox("Boat")
+        self.boat_position_plot_box.setFont(self.GUI_FONT)
 
-        self.boat_speed_plot_box.setAlignment(QtCore.Qt.AlignLeft)
-        self.boat_speed_plot_box_layout = QtWidgets.QVBoxLayout()
-        self.boat_speed_plot_box_layout.addWidget(self.boat_speed_plot_chartview)
-        self.boat_speed_plot_box.setLayout(self.boat_speed_plot_box_layout)
+        self.boat_position_plot_box.setAlignment(QtCore.Qt.AlignLeft)
+        self.boat_position_plot_box_layout = QtWidgets.QVBoxLayout()
+        self.boat_position_plot_box_layout.addWidget(self.boat_position_plot_chartview)
+        self.boat_position_plot_box.setLayout(self.boat_position_plot_box_layout)
 
-        self.charts_panel_layout.addWidget(self.boat_speed_plot_box)
+        self.charts_panel_layout.addWidget(self.boat_position_plot_box)
 
 
         ############################################
@@ -393,28 +404,22 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         new_bar_set = QBarSet(str(self.seen_strokes))
         value = self.work_per_stroke_data[-1]
         new_bar_set.append(value)
-        new_bar_set.setBrush(self.gradient)
-        #new_bar_set.setColor(
-        #    #color_scales.viridis.get_color_from_normalized_value(value / self.WORK_PLOT_MAX_Y)
-        #    self.COLOR_DARK_GREY
-        #)
+        #new_bar_set.setBrush(self.gradient)
+        new_bar_set.setColor(
+            color_scales.viridis.get_color_from_normalized_value(value / self.WORK_PLOT_MAX_Y)
+        )
         # Append new set, and remove oldest
         self.work_plot_series.append(new_bar_set)
         self.work_plot_series.remove(self.work_plot_series.barSets()[0])
 
-    def update_boat_speed_plot(self):
-        # Create new bar set
-        new_bar_set = QBarSet(str(self.seen_strokes))
-        value = self.boat_speed_data[-1]
-        new_bar_set.append(value)
-        new_bar_set.setBrush(self.gradient)
-        #new_bar_set.setColor(
-        #    #color_scales.plasma.get_color_from_normalized_value(value / self.BOAT_SPEED_PLOT_MAX_Y)
-        #    self.COLOR_DARK_GREY
-        #)
-        # Append new set, and remove oldest
-        self.boat_speed_plot_series.append(new_bar_set)
-        self.boat_speed_plot_series.remove(self.boat_speed_plot_series.barSets()[0])
+    def update_boat_position_plot(self):
+        current_position = self.workout.boat.position.values[-1]
+        self.boat_position_series.append(current_position, 0.5)
+        self.boat_position_series.remove(0)
+        self.boat_position_plot_horizontal_axis.setRange(
+            current_position - self.BOAT_PLOT_WINDOW_METERS / 2,
+            current_position + self.BOAT_PLOT_WINDOW_METERS / 2
+        )
 
     def start(self):
         if not self.started:
@@ -433,7 +438,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     def stop_workout(self):
         self.timer.stop()
         self.workout.stop()
-        if not self.DISABLE_LOGGING and not DEV_MODE:
+        if not DISABLE_LOGGING and not DEV_MODE:
             self.workout.save(output_folder_path=self.log_folder_path)
 
     def _format_total_workout_time(self, value_seconds):
@@ -467,6 +472,8 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.ydata = self.ydata[1:] + [self.workout.person.torque.values[-1]]
             self.xdata = self.xdata[1:] + [self.workout.person.torque.timestamps[-1]]
             self.update_torque_plot()
+        # Update boat visualization
+        self.update_boat_position_plot()
         # Update SPM
         new_stroke_info_available = len(self.workout.person.strokes) > self.seen_strokes
         if new_stroke_info_available:
@@ -489,7 +496,6 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
             self.boat_speed_label.setText(self._format_boat_speed(average_boat_speed))
             split_time_seconds = 500.0 / average_boat_speed
             self.split_time_label.setText(self._format_boat_pace(split_time_seconds))
-            self.update_boat_speed_plot()
 
     def timer_tick(self):
         # Do nothing if we haven't received an encoder pulse yet.
