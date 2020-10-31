@@ -20,7 +20,7 @@ from PyQt5.QtChart import (
     QScatterSeries,
 )
 
-DEV_MODE = True
+DEV_MODE = False
 DISABLE_LOGGING = True
 
 
@@ -63,7 +63,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     PLOT_FAST_DRAWING = False
 
     BOAT_PLOT_WINDOW_METERS = 100
-    BOAT_PLOT_TICK_DISTANCE = 20
+    BOAT_PLOT_TICK_DISTANCE = 25
 
     WORK_PLOT_VISIBLE_STROKES = 64
     WORK_PLOT_MIN_Y = 0
