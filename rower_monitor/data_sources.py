@@ -111,7 +111,9 @@ class PiGpioClient(DataSource):
 class CsvFile(PiGpioClient):
     DUMMY_VALUE = 0
     RAW_TICKS_COLUMN_NAME = 'ticks'
-    SAMPLE_DELAY_SECONDS = 0.016
+    #SAMPLE_DELAY_SECONDS = 0.016
+    DELAY_SPEED_UP_FACTOR = 2.0
+    MAX_SAMPLE_DELAY_SECONDS = 0.1
 
     def __init__(
         self,
@@ -128,6 +130,7 @@ class CsvFile(PiGpioClient):
         self.sample_delay = sample_delay
         self.threaded = threaded
         self._reader_thread = None
+        self._last_timestamp = 0
 
     def start(self, sensor_pulse_event_handler_callback):
         if self.threaded:
@@ -142,12 +145,23 @@ class CsvFile(PiGpioClient):
                     raw_ticks = int(row[self.raw_ticks_column_name])
                     if raw_ticks == self.DUMMY_VALUE:
                         continue
+                    timestamp = self.get_timestamp_from_raw_ticks(raw_ticks)
                     sensor_pulse_event_handler_callback(
-                        self.get_timestamp_from_raw_ticks(raw_ticks),
+                        timestamp,
                         raw_ticks
                     )
-                    if self.sample_delay:
-                        time.sleep(self.SAMPLE_DELAY_SECONDS)
+                    self.delay(timestamp)
+
+    def delay(self, current_timestamp):
+        if not self.sample_delay:
+            return
+        else:
+            delay_time = min(
+                self.MAX_SAMPLE_DELAY_SECONDS,
+                (current_timestamp - self._last_timestamp) / self.DELAY_SPEED_UP_FACTOR
+            )
+            time.sleep(delay_time)
+            self._last_timestamp = current_timestamp
 
     def stop(self):
         if self._reader_thread is not None:
@@ -171,12 +185,12 @@ class CsvReaderThread(threading.Thread):
             raw_ticks = int(row[self.parent.raw_ticks_column_name])
             if raw_ticks == self.parent.DUMMY_VALUE:
                 continue
+            timestamp = self.parent.get_timestamp_from_raw_ticks(raw_ticks)
             self.sensor_pulse_event_handler_callback(
-                self.parent.get_timestamp_from_raw_ticks(raw_ticks),
+                timestamp,
                 raw_ticks
             )
-            if self.parent.sample_delay:
-                time.sleep(self.parent.SAMPLE_DELAY_SECONDS)
+            self.parent.delay(timestamp)
 
     def stop(self):
         self.go = False
