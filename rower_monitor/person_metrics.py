@@ -70,8 +70,8 @@ class Stroke:
 
 class PersonMetricsTracker:
     # This is the filter, in seconds, that we apply when we detect the start of a new stroke.
-    # It's probably safe to assume that the user will never reach 60 strokes per minute.
-    MINIMUM_STROKE_DURATION_FILTER = 1.0
+    # It's probably safe to assume that the user will never reach 50 strokes per minute.
+    MINIMUM_STROKE_DURATION_FILTER = 50.0 / 60.0  # 50 spm
 
     def __init__(self, workout):
         self.workout = workout

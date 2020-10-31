@@ -37,7 +37,11 @@ class TimeSeries:
                 next_timestamp = data.timestamps[idx+1]
                 duration = next_timestamp - timestamp  # TODO: is this the right way to calculate this?
             accum += value * duration
-        return accum / total_time
+        if total_time == 0:
+            print('Warning: found stroke with zero duration at (%s, %s)' % (str(start_time), str(end_time)))
+            return 0
+        else:
+            return accum / total_time
 
     def interpolate_midpoints(self):
         """Returns interpolated samples at the midpoints of the existing data points. We use this to align the
