@@ -69,13 +69,9 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
     WORK_PLOT_MIN_Y = 0
     WORK_PLOT_MAX_Y = 350
 
-    BOAT_SPEED_PLOT_VISIBLE_STROKES = 64
-    BOAT_SPEED_PLOT_MIN_Y = 0
-    BOAT_SPEED_PLOT_MAX_Y = 10
-
     GUI_FONT = QtGui.QFont('Nunito SemiBold', 12)
-    GUI_FONT_LARGE = QtGui.QFont('Nunito', 24)
-    GUI_FONT_MEDIUM = QtGui.QFont('Nunito', 16)
+    GUI_FONT_LARGE = QtGui.QFont('Nunito ExtraBold', 24)
+    GUI_FONT_MEDIUM = QtGui.QFont('Nunito SemiBold', 16)
 
     def __init__(self, config, data_source, *args, **kwargs):
         super(RowingMonitorMainWindow, self).__init__(*args, **kwargs)
@@ -362,7 +358,7 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         self.boat_position_plot_horizontal_axis.setTickType(QValueAxis.TicksDynamic)
         self.boat_position_plot_horizontal_axis.setVisible(True)
         self.boat_position_plot_horizontal_axis.setLabelsFont(QtGui.QFont('Nunito SemiBold', 14))
-        self.boat_position_plot_horizontal_axis.setLabelFormat('%.0f')
+        self.boat_position_plot_horizontal_axis.setLabelFormat("%'.0f")
 
         # Add plot view to GUI
         self.boat_position_plot_chartview = QChartView(self.boat_position_plot)
@@ -406,9 +402,11 @@ class RowingMonitorMainWindow(QtWidgets.QMainWindow):
         value = self.work_per_stroke_data[-1]
         new_bar_set.append(value)
         #new_bar_set.setBrush(self.gradient)
-        new_bar_set.setColor(
-            color_scales.viridis.get_color_from_normalized_value(value / self.WORK_PLOT_MAX_Y)
-        )
+        bar_color = color_scales.plasma.get_color_from_normalized_value(value / self.WORK_PLOT_MAX_Y)
+        new_bar_set.setColor(bar_color)
+        pen = new_bar_set.pen()
+        pen.setColor(bar_color)
+        new_bar_set.setPen(pen)
         # Append new set, and remove oldest
         self.work_plot_series.append(new_bar_set)
         self.work_plot_series.remove(self.work_plot_series.barSets()[0])

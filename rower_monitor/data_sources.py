@@ -112,8 +112,8 @@ class CsvFile(PiGpioClient):
     DUMMY_VALUE = 0
     RAW_TICKS_COLUMN_NAME = 'ticks'
     #SAMPLE_DELAY_SECONDS = 0.016
-    DELAY_SPEED_UP_FACTOR = 2.0
-    MAX_SAMPLE_DELAY_SECONDS = 0.1
+    DELAY_SPEED_UP_FACTOR = 4.0
+    MAX_SAMPLE_DELAY_SECONDS = 0.05
 
     def __init__(
         self,
